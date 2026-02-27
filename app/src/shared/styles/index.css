@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --color-page: 23 23 23;
+    --color-surface: 31 31 31;
+    --color-error: 221 70 25;
+
+    --color-brand-50: 35 35 35;
+    --color-brand-100: 47 47 47;
+    --color-brand-200: 58 58 58;
+    --color-brand-300: 74 74 74;
+    --color-brand-400: 143 143 143;
+    --color-brand-500: 192 192 192;
+    --color-brand-600: 215 215 215;
+    --color-brand-700: 255 255 255;
+
+    --color-ink-600: 124 124 124;
+    --color-ink-700: 192 192 192;
+    --color-ink-800: 255 255 255;
+
+    --color-success: 192 192 192;
+    --color-warning: 192 192 192;
+
+    --color-slate-50: 31 31 31;
+    --color-slate-100: 36 36 36;
+    --color-slate-200: 45 45 45;
+    --color-slate-300: 58 58 58;
+    --color-slate-400: 192 192 192;
+    --color-slate-500: 124 124 124;
+    --color-slate-600: 143 143 143;
+    --color-slate-700: 163 163 163;
+    --color-slate-800: 186 186 186;
+    --color-slate-900: 255 255 255;
+
+    --shadow-panel: 0 20px 45px -30px rgba(0, 0, 0, 0.75);
+  }
+
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --color-page: 243 244 246;
+    --color-surface: 255 255 255;
+    --color-error: 221 70 25;
+
+    --color-brand-50: 243 244 246;
+    --color-brand-100: 229 231 235;
+    --color-brand-200: 209 213 219;
+    --color-brand-300: 156 163 175;
+    --color-brand-400: 107 114 128;
+    --color-brand-500: 23 23 23;
+    --color-brand-600: 15 15 15;
+    --color-brand-700: 0 0 0;
+
+    --color-ink-600: 107 114 128;
+    --color-ink-700: 55 65 81;
+    --color-ink-800: 17 24 39;
+
+    --color-success: 55 65 81;
+    --color-warning: 107 114 128;
+
+    --color-slate-50: 255 255 255;
+    --color-slate-100: 248 250 252;
+    --color-slate-200: 226 232 240;
+    --color-slate-300: 203 213 225;
+    --color-slate-400: 148 163 184;
+    --color-slate-500: 100 116 139;
+    --color-slate-600: 71 85 105;
+    --color-slate-700: 51 65 85;
+    --color-slate-800: 30 41 59;
+    --color-slate-900: 15 23 42;
+
+    --shadow-panel: 0 20px 45px -30px rgba(15, 23, 42, 0.28);
+  }
+
+  * {
+    @apply border-slate-200;
+  }
+
+  *,
+  *::before,
+  *::after {
+    border-radius: 0 !important;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply m-0 bg-page font-sans text-ink-600 antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply text-ink-800;
+  }
+}
