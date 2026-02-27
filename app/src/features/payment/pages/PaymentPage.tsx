@@ -10,7 +10,7 @@ export const PaymentPage = () => {
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
-      <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel">
+      <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel pb-16">
         <header className="grid grid-cols-[40px_1fr_40px] items-center border-b border-slate-200 px-4 pb-4 pt-5">
           <button
             type="button"

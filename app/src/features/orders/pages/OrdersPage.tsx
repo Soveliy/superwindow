@@ -164,7 +164,7 @@ export const OrdersPage = () => {
           <button
             type="button"
             onClick={() => navigate('/orders/new')}
-            className="fixed bottom-20 right-4 inline-flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-50  transition-colors hover:bg-slate-100"
+            className="fixed bottom-20 right-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-50  transition-colors hover:bg-slate-100"
             aria-label="Создать заказ"
           >
             <Plus className="h-7 w-7" />

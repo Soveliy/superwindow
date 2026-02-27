@@ -36,7 +36,7 @@ export const SettingsPage = () => {
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
-      <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel">
+      <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel pb-16">
         <section className="flex-1 px-4 pb-5 pt-5">
           <header className="mb-5 grid grid-cols-[40px_1fr_40px] items-center">
             <button

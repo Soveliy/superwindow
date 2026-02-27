@@ -27,7 +27,7 @@ const tabs = [
 
 export const BottomNav = () => {
   return (
-    <nav className="fixed bottom-0 border-t border-slate-200 bg-surface/95 px-2 pb-2  pt-2 backdrop-blur-sm">
+    <nav className="fixed w-full left-0 bottom-0 border-t border-slate-200 bg-surface/95 px-2 pb-2  pt-2 backdrop-blur-sm">
       <ul className="grid grid-cols-4 gap-1">
         {tabs.map((tab) => (
           <li key={tab.to}>

@@ -36,7 +36,7 @@ export const Button = ({
       {...props}
     >
       {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-      <span className='flex items-center justify-center ga'>{children}</span>
+      <span className='flex items-center justify-center gap-1'>{children}</span>
     </button>
   );
 };

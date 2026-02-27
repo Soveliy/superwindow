@@ -75,7 +75,7 @@ export const CalculatorPage = () => {
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
-      <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel">
+      <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel pb-12">
         <header className="border-b border-slate-200 px-4 pb-4 pt-5">
           <div className="mb-4 flex items-center justify-between">
             <button
@@ -278,7 +278,7 @@ export const CalculatorPage = () => {
           </section>
         </section>
 
-        <footer className="fixed bottom-6 left-1/2 w-[calc(100%-24px)] max-w-[390px] -translate-x-1/2 rounded-t-2xl border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-lg backdrop-blur-sm">
+        <footer className="fixed width-full bottom-0 left-1/2 w-[calc(100%-24px)] max-w-[390px] -translate-x-1/2 rounded-t-2xl border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-lg backdrop-blur-sm">
           <div className="mb-3 flex items-end justify-between gap-2">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Итого</p>
