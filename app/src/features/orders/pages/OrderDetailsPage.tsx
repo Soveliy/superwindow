@@ -263,7 +263,7 @@ export const OrderDetailsPage = () => {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="mb-1 flex items-center justify-between gap-2">
-                      <span className="truncate text-[30px] font-extrabold leading-none tracking-tight text-ink-800">
+                      <span className="truncate text-[16px] font-extrabold leading-none tracking-tight text-ink-800">
                         {collapsedCustomerName}
                       </span>
                       <span className="shrink-0 rounded-full bg-brand-50 px-3 py-1 text-[11px] font-bold text-brand-600">
@@ -283,7 +283,7 @@ export const OrderDetailsPage = () => {
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h2 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-ink-800">
                     <UserRound className="h-5 w-5 text-brand-500" />
-                    Информация о клиенте
+                    Клиент
                   </h2>
                   <button
                     type="button"
