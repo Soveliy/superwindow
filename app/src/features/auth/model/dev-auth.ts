@@ -8,7 +8,7 @@ interface DevAuthCredentials {
 }
 
 const getDevCredentials = (): DevAuthCredentials | null => {
-  if (!import.meta.env.DEV || !env.devAuthEnabled) {
+  if (!env.devAuthEnabled) {
     return null;
   }
 
