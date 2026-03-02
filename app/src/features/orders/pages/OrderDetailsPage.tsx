@@ -1,30 +1,31 @@
-import { useState } from 'react';
+﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import {
-  EllipsisVertical,
+  Copy,
   MapPin,
   Pencil,
-  PlusCircle,
+  Plus,
   ShoppingCart,
   Trash2,
   UserRound,
 } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { orderDetailsMock, orderItemsMock } from '@/features/orders/model/orders.mock';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { orderDetailsMock } from '@/features/orders/model/orders.mock';
+import {
+  clearCalculatorPositions,
+  readCalculatorPositions,
+  writeCalculatorPositions,
+  type CalculatorPosition,
+} from '@/features/calculator/model/positions.storage';
+import { ordersStorage, type OrderCustomerForm } from '@/features/orders/model/orders.storage';
 import { formatCurrency } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/Button';
 import { TextField } from '@/shared/ui/TextField';
 import { ArrowLeft } from 'lucide-react';
-interface CustomerFormState {
-  fullName: string;
-  phone: string;
-  address: string;
-  contractNumber: string;
-  readinessDate: string;
-  installationDate: string;
-  comment: string;
-}
 
-const defaultFormValues: CustomerFormState = {
+interface OrderDetailsLocationState {
+  resetCalculatorPositions?: boolean;
+}
+const existingOrderDefaultValues: OrderCustomerForm = {
   fullName: 'Александр Петров',
   phone: '+7 (000) 000-00-00',
   address: 'Начните вводить адрес...',
@@ -34,12 +35,184 @@ const defaultFormValues: CustomerFormState = {
   comment: '',
 };
 
+const formatPhoneInput = (rawValue: string) => {
+  const digitsOnly = rawValue.replace(/\D/g, '');
+
+  if (!digitsOnly) {
+    return '';
+  }
+
+  let normalized = digitsOnly;
+
+  if (normalized.startsWith('8')) {
+    normalized = `7${normalized.slice(1)}`;
+  } else if (!normalized.startsWith('7')) {
+    normalized = `7${normalized}`;
+  }
+
+  const phoneDigits = normalized.slice(0, 11);
+  const areaCode = phoneDigits.slice(1, 4);
+  const firstPart = phoneDigits.slice(4, 7);
+  const secondPart = phoneDigits.slice(7, 9);
+  const thirdPart = phoneDigits.slice(9, 11);
+
+  let masked = '+7';
+
+  if (areaCode) {
+    masked += ` (${areaCode}`;
+    if (areaCode.length === 3) {
+      masked += ')';
+    }
+  }
+  if (firstPart) {
+    masked += ` ${firstPart}`;
+  }
+  if (secondPart) {
+    masked += `-${secondPart}`;
+  }
+  if (thirdPart) {
+    masked += `-${thirdPart}`;
+  }
+
+  return masked;
+};
+
+const formatDateInput = (rawValue: string) => {
+  const digitsOnly = rawValue.replace(/\D/g, '').slice(0, 8);
+
+  if (digitsOnly.length <= 2) {
+    return digitsOnly;
+  }
+  if (digitsOnly.length <= 4) {
+    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
+  }
+
+  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4)}`;
+};
+
+const getInitialFormValues = (orderId: string | undefined): OrderCustomerForm => {
+  if (!orderId) {
+    return ordersStorage.createEmptyOrderCustomerForm();
+  }
+
+  return ordersStorage.getOrderForm(orderId) ?? existingOrderDefaultValues;
+};
+const getInitialPositions = (
+  orderId: string | undefined,
+  shouldResetCalculatorPositions: boolean,
+): CalculatorPosition[] => {
+  if (!orderId) {
+    return shouldResetCalculatorPositions ? [] : readCalculatorPositions();
+  }
+
+  return ordersStorage.getOrderPositions(orderId) ?? [];
+};
+
 export const OrderDetailsPage = () => {
+  const location = useLocation();
   const navigate = useNavigate();
   const { orderId } = useParams();
-  const [form, setForm] = useState<CustomerFormState>(defaultFormValues);
+  const shouldResetCalculatorPositions =
+    (location.state as OrderDetailsLocationState | null)?.resetCalculatorPositions === true;
+  const [form, setForm] = useState<OrderCustomerForm>(() => getInitialFormValues(orderId));
+  const [positions, setPositions] = useState<CalculatorPosition[]>(() =>
+    getInitialPositions(orderId, shouldResetCalculatorPositions),
+  );
 
-  const resolvedOrderId = orderId ?? orderDetailsMock.orderId;
+  const order = orderId ? ordersStorage.getOrderById(orderId) : undefined;
+  const isCustomerFieldsReadonly = order?.status === 'ready';
+  const resolvedOrderId = orderId ?? 'Новый заказ';
+  const calculatorReturnPath = orderId ? `/orders/${orderId}` : '/orders/new';
+
+  const positionCards = useMemo(
+    () =>
+      positions.map((position, index) => ({
+        ...position,
+        width: position.width ?? 1300 + index * 80,
+        height: position.height ?? 1400 + index * 60,
+        price: position.price ?? 0,
+      })),
+    [positions],
+  );
+  const windowsTotal = useMemo(
+    () => positionCards.reduce((total, position) => total + position.price, 0),
+    [positionCards],
+  );
+  const savedOrderAmount = windowsTotal > 0 ? windowsTotal : order?.amount ?? null;
+  const orderTotalAmount = savedOrderAmount ?? 0;
+
+  useEffect(() => {
+    setForm(getInitialFormValues(orderId));
+    setPositions(getInitialPositions(orderId, shouldResetCalculatorPositions));
+  }, [orderId, shouldResetCalculatorPositions]);
+
+  useEffect(() => {
+    if (!orderId && shouldResetCalculatorPositions) {
+      clearCalculatorPositions();
+    }
+  }, [orderId, shouldResetCalculatorPositions]);
+
+  useEffect(() => {
+    writeCalculatorPositions(positions);
+  }, [positions]);
+
+  const handleSaveDraft = () => {
+    if (orderId) {
+      ordersStorage.saveOrder(orderId, form, savedOrderAmount, positions);
+      return;
+    }
+
+    const createdOrderId = ordersStorage.createOrder(form, savedOrderAmount, positions);
+    navigate(`/orders/${createdOrderId}`, { replace: true });
+  };
+  const handleOpenPayment = () => {
+    if (orderId) {
+      ordersStorage.saveOrder(orderId, form, savedOrderAmount, positions);
+      navigate(`/payment?orderId=${encodeURIComponent(orderId)}`);
+      return;
+    }
+
+    const createdOrderId = ordersStorage.createOrder(form, savedOrderAmount, positions);
+    navigate(`/payment?orderId=${encodeURIComponent(createdOrderId)}`);
+  };
+
+  const handlePhoneChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setForm((state) => ({ ...state, phone: formatPhoneInput(event.target.value) }));
+  };
+  const handleDateChange =
+    (field: 'readinessDate' | 'installationDate') => (event: ChangeEvent<HTMLInputElement>) => {
+      setForm((state) => ({ ...state, [field]: formatDateInput(event.target.value) }));
+    };
+  const addPosition = (): void => {
+    setPositions((state) => {
+      const nextId = state.length > 0 ? Math.max(...state.map((item) => item.id)) + 1 : 1;
+
+      return [...state, { id: nextId }];
+    });
+  };
+  const copyPosition = (positionId: number): void => {
+    setPositions((state) => {
+      const source = state.find((item) => item.id === positionId);
+
+      if (!source) {
+        return state;
+      }
+
+      const nextId = Math.max(...state.map((item) => item.id)) + 1;
+
+      return [...state, { ...source, id: nextId }];
+    });
+  };
+  const removePosition = (positionId: number): void => {
+    setPositions((state) => state.filter((item) => item.id !== positionId));
+  };
+  const handleAddWindow = (): void => {
+    addPosition();
+    navigate('/calculator', { state: { startStep: 2, returnTo: calculatorReturnPath } });
+  };
+  const openCalculatorStep2 = (): void => {
+    navigate('/calculator', { state: { startStep: 2, returnTo: calculatorReturnPath } });
+  };
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
@@ -56,6 +229,7 @@ export const OrderDetailsPage = () => {
           <button
             type="button"
             className="justify-self-end text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700"
+            onClick={handleSaveDraft}
           >
             Сохранить черновик
           </button>
@@ -70,16 +244,23 @@ export const OrderDetailsPage = () => {
             <div className="space-y-3">
               <TextField
                 label="ФИО"
+                readOnly={isCustomerFieldsReadonly}
                 value={form.fullName}
                 onChange={(event) => setForm((state) => ({ ...state, fullName: event.target.value }))}
               />
               <TextField
                 label="Телефон"
+                type="tel"
+                inputMode="numeric"
+                maxLength={18}
+                placeholder="+7 (___) ___-__-__"
+                readOnly={isCustomerFieldsReadonly}
                 value={form.phone}
-                onChange={(event) => setForm((state) => ({ ...state, phone: event.target.value }))}
+                onChange={handlePhoneChange}
               />
               <TextField
                 label="Адрес доставки"
+                readOnly={isCustomerFieldsReadonly}
                 value={form.address}
                 onChange={(event) => setForm((state) => ({ ...state, address: event.target.value }))}
                 rightSlot={<MapPin className="h-4 w-4 text-slate-400" />}
@@ -87,26 +268,34 @@ export const OrderDetailsPage = () => {
               <div className="grid grid-cols-2 gap-3">
                 <TextField
                   label="Договор №"
+                  readOnly={isCustomerFieldsReadonly}
                   value={form.contractNumber}
                   onChange={(event) => setForm((state) => ({ ...state, contractNumber: event.target.value }))}
                 />
                 <TextField
                   label="Дата готовности"
                   placeholder="дд/мм/гггг"
+                  inputMode="numeric"
+                  maxLength={10}
+                  readOnly={isCustomerFieldsReadonly}
                   value={form.readinessDate}
-                  onChange={(event) => setForm((state) => ({ ...state, readinessDate: event.target.value }))}
+                  onChange={handleDateChange('readinessDate')}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <TextField
                   label="Дата монтажа"
                   placeholder="дд/мм/гггг"
+                  inputMode="numeric"
+                  maxLength={10}
+                  readOnly={isCustomerFieldsReadonly}
                   value={form.installationDate}
-                  onChange={(event) => setForm((state) => ({ ...state, installationDate: event.target.value }))}
+                  onChange={handleDateChange('installationDate')}
                 />
                 <TextField
                   label="Комментарий"
                   placeholder="Заметки..."
+                  readOnly={isCustomerFieldsReadonly}
                   value={form.comment}
                   onChange={(event) => setForm((state) => ({ ...state, comment: event.target.value }))}
                 />
@@ -121,58 +310,77 @@ export const OrderDetailsPage = () => {
                 Позиции заказа
               </h2>
               <span className="rounded-full bg-brand-50 px-2 py-1 text-[11px] font-bold text-brand-600">
-                {orderItemsMock.length} ПОЗИЦИИ
+                {positions.length} ПОЗИЦИИ
               </span>
             </div>
-            <div className="space-y-3">
-              {orderItemsMock.map((item) => (
-                <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex gap-3">
-                      <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                        <PlusCircle className="h-5 w-5" />
+            {positionCards.length > 0 ? (
+              <div className="space-y-3">
+                {positionCards.map((position) => (
+                  <article key={position.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
+                    <div className="mb-3 flex items-start gap-3">
+                      <div className="inline-flex h-20 w-20 items-center justify-center rounded-xl border border-slate-300 bg-slate-100">
+                        <div className="h-10 w-10 border border-slate-400">
+                          <div className="h-full w-1/2 border-r border-slate-400" />
+                        </div>
                       </div>
                       <div>
-                        <p className="text-base font-bold text-ink-800">{item.title}</p>
-                        <p className="max-w-[190px] text-xs text-slate-500">{item.details}</p>
-                        <p className="mt-1 text-2xl font-extrabold tracking-tight text-brand-600">
-                          {formatCurrency(item.price, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <p className="text-lg font-extrabold text-ink-800">Позиция {position.id}</p>
+                        <p className="text-sm text-slate-500">Конфигурация в калькуляторе</p>
+                        <p className="mt-2 text-2xl font-extrabold leading-none text-ink-800">
+                          {position.width} x {position.height} мм
                         </p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
-                    >
-                      <EllipsisVertical className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="mt-2 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-                      aria-label="Редактировать позицию"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-error/10 hover:text-error"
-                      aria-label="Удалить позицию"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <Button variant="secondary" onClick={() => navigate('/calculator')}>
-                Добавить изделие
-              </Button>
-              <Button variant="ghost" className="border border-slate-200">
-                + Аксессуар
-              </Button>
+                    <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                      <p className="text-[30px] font-extrabold leading-none text-ink-800">
+                        {position.price > 0
+                          ? formatCurrency(position.price, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          : '—'}
+                      </p>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => copyPosition(position.id)}
+                          className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-300 bg-slate-100 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+                        >
+                          <Copy className="h-4 w-4" />
+                          Копировать
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openCalculatorStep2}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-brand-500 hover:bg-slate-200"
+                          aria-label="Редактировать позицию"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removePosition(position.id)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-400 hover:bg-slate-200"
+                          aria-label="Удалить позицию"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-slate-500">
+                Пока нет добавленных окон
+              </div>
+            )}
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={handleAddWindow}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-400 bg-brand-50 text-base font-bold text-brand-600 hover:bg-brand-100"
+              >
+                <Plus className="h-5 w-5" />
+                Добавить еще одно окно
+              </button>
             </div>
           </section>
 
@@ -186,7 +394,7 @@ export const OrderDetailsPage = () => {
               <div className="text-right">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Итого</p>
                 <p className="text-[36px] font-extrabold leading-none tracking-tight text-ink-800">
-                  {formatCurrency(orderDetailsMock.totalAmount, {
+                  {formatCurrency(orderTotalAmount, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -195,14 +403,12 @@ export const OrderDetailsPage = () => {
             </div>
           </section>
 
-          <Button className="h-14 text-base" onClick={() => navigate('/payment')}>
+          <Button className="h-14 text-base" onClick={handleOpenPayment}>
             Перейти к оплате &gt;
           </Button>
         </section>
 
-        <footer className="px-4 pb-4">
-          <div className="mx-auto h-1.5 w-28 rounded-full bg-slate-200" />
-        </footer>
+
       </main>
     </div>
   );

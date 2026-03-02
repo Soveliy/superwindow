@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Bell, CalendarDays, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
-import { ordersMock, type OrderStatus, type OrderSummary } from '@/features/orders/model/orders.mock';
+import { type OrderStatus, type OrderSummary } from '@/features/orders/model/orders.mock';
+import { ordersStorage } from '@/features/orders/model/orders.storage';
 import { cn } from '@/shared/lib/cn';
 import { formatCurrency } from '@/shared/lib/format';
 
@@ -73,19 +74,30 @@ const OrderCard = ({ order }: { order: OrderSummary }) => {
 
 export const OrdersPage = () => {
   const navigate = useNavigate();
-  const [searchByCustomer, setSearchByCustomer] = useState('');
+  const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<OrdersFilter>('all');
 
   const filteredOrders = useMemo(() => {
-    const normalizedQuery = searchByCustomer.trim().toLowerCase();
+    const orders = ordersStorage.getOrders();
+    const normalizedQuery = orderSearchQuery.trim().toLowerCase();
+    const normalizedDigitsQuery = normalizedQuery.replace(/\D/g, '');
 
-    return ordersMock.filter((order) => {
+    return orders.filter((order) => {
       const matchesStatus = activeFilter === 'all' ? true : order.status === activeFilter;
-      const matchesCustomer = normalizedQuery ? order.customer.toLowerCase().includes(normalizedQuery) : true;
+      const normalizedOrderId = order.id.toLowerCase();
+      const normalizedOrderDigits = normalizedOrderId.replace(/\D/g, '');
+      const normalizedCustomer = order.customer.toLowerCase();
+      const matchesOrderByText = normalizedQuery ? normalizedOrderId.includes(normalizedQuery) : true;
+      const matchesOrderByDigits = normalizedDigitsQuery
+        ? normalizedOrderDigits.includes(normalizedDigitsQuery)
+        : false;
+      const matchesOrder = matchesOrderByText || matchesOrderByDigits;
+      const matchesCustomer = normalizedQuery ? normalizedCustomer.includes(normalizedQuery) : true;
+      const matchesSearch = matchesOrder || matchesCustomer;
 
-      return matchesStatus && matchesCustomer;
+      return matchesStatus && matchesSearch;
     });
-  }, [activeFilter, searchByCustomer]);
+  }, [activeFilter, orderSearchQuery]);
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
@@ -115,9 +127,9 @@ export const OrdersPage = () => {
             <Search className="h-4 w-4 text-slate-400" />
             <input
               type="text"
-              value={searchByCustomer}
-              onChange={(event) => setSearchByCustomer(event.target.value)}
-              placeholder="Поиск по имени клиента..."
+              value={orderSearchQuery}
+              onChange={(event) => setOrderSearchQuery(event.target.value)}
+              placeholder="Поиск по номеру или имени клиента..."
               className="h-11 flex-1 border-none bg-transparent text-sm text-ink-700 outline-none placeholder:text-slate-400"
             />
             <button
@@ -163,7 +175,7 @@ export const OrdersPage = () => {
 
           <button
             type="button"
-            onClick={() => navigate('/orders/new')}
+            onClick={() => navigate('/orders/new', { state: { resetCalculatorPositions: true } })}
             className="fixed bottom-20 right-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-50  transition-colors hover:bg-slate-100"
             aria-label="Создать заказ"
           >

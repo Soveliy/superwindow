@@ -1,12 +1,24 @@
 import { ArrowLeft, CheckCircle2, Clock3, UserRound } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
-import { orderDetailsMock } from '@/features/orders/model/orders.mock';
+import { ordersStorage } from '@/features/orders/model/orders.storage';
 import { formatCurrency } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/Button';
 
 export const PaymentPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const orderId = searchParams.get('orderId')?.trim() ?? '';
+  const order = orderId ? ordersStorage.getOrderById(orderId) : undefined;
+  const orderForm = orderId ? ordersStorage.getOrderForm(orderId) : null;
+
+  const customerName = orderForm?.fullName.trim() || order?.customer || 'Клиент';
+  const packageTitle = order?.subtitle || 'Ожидание расчета';
+  const totalAmount = order?.amount ?? 0;
+  const installmentAmount = totalAmount > 0 ? totalAmount / 3 : 0;
+  const backPath = orderId ? `/orders/${orderId}` : '/orders/new';
+  const paymentStatusLabel =
+    order?.status === 'paid' ? 'Оплачен' : order?.status === 'ready' ? 'Готов' : 'Ожидает';
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
@@ -15,7 +27,7 @@ export const PaymentPage = () => {
           <button
             type="button"
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-700 transition-colors hover:bg-slate-100"
-            onClick={() => navigate('/orders/new')}
+            onClick={() => navigate(backPath)}
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -28,9 +40,11 @@ export const PaymentPage = () => {
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Номер заказа</p>
-                <p className="text-3xl font-extrabold tracking-tight text-ink-800">#{orderDetailsMock.orderId}</p>
+                <p className="text-3xl font-extrabold tracking-tight text-ink-800">#{orderId || '—'}</p>
               </div>
-              <span className="rounded-full bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-600">Ожидает</span>
+              <span className="rounded-full bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-600">
+                {paymentStatusLabel}
+              </span>
             </div>
 
             <div className="mb-4 flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2">
@@ -38,15 +52,15 @@ export const PaymentPage = () => {
                 <UserRound className="h-5 w-5" />
               </span>
               <div>
-                <p className="font-semibold text-ink-800">{orderDetailsMock.customerName}</p>
-                <p className="text-xs text-slate-500">{orderDetailsMock.packageTitle}</p>
+                <p className="font-semibold text-ink-800">{customerName}</p>
+                <p className="text-xs text-slate-500">{packageTitle}</p>
               </div>
             </div>
 
             <div className="mb-4 text-center">
               <p className="text-xs uppercase tracking-wide text-slate-500">Сумма к оплате</p>
               <p className="mt-1 text-[50px] font-extrabold leading-none tracking-tight text-ink-800">
-                {formatCurrency(orderDetailsMock.totalAmount * 10, {
+                {formatCurrency(totalAmount, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
@@ -65,7 +79,12 @@ export const PaymentPage = () => {
               <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                 <span className='flex flex-col'>
                   <span className="font-semibold text-ink-800">Рассрочка</span>
-                  <span className="text-xs text-slate-500">3 ежемесячных платежа по 1 616,67 ₽</span>
+                  <span className="text-xs text-slate-500">
+                    {`3 ежемесячных платежа по ${formatCurrency(installmentAmount, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`}
+                  </span>
                 </span>
                 <input type="radio" name="payment-mode" />
               </label>
