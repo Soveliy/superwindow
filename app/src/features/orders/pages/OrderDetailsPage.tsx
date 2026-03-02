@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import {
+  ChevronDown,
   Copy,
   MapPin,
   Pencil,
@@ -118,11 +119,22 @@ export const OrderDetailsPage = () => {
   const [positions, setPositions] = useState<CalculatorPosition[]>(() =>
     getInitialPositions(orderId, shouldResetCalculatorPositions),
   );
+  const [isCustomerInfoCollapsed, setCustomerInfoCollapsed] = useState(false);
 
   const order = orderId ? ordersStorage.getOrderById(orderId) : undefined;
   const isCustomerFieldsReadonly = order?.status === 'ready';
   const resolvedOrderId = orderId ?? 'Новый заказ';
   const calculatorReturnPath = orderId ? `/orders/${orderId}` : '/orders/new';
+  const collapsedCustomerName = form.fullName.trim() || 'Новый клиент';
+  const collapsedCustomerAddress = form.address.trim() || 'Адрес не указан';
+  const collapsedCustomerStatusLabel =
+    order?.status === 'ready'
+      ? 'Готов'
+      : order?.status === 'paid'
+        ? 'Оплачен'
+        : order?.status === 'in_progress'
+          ? 'В работе'
+          : 'Черновик';
 
   const positionCards = useMemo(
     () =>
@@ -237,70 +249,115 @@ export const OrderDetailsPage = () => {
 
         <section className="space-y-6 px-4 pb-6 pt-5">
           <section>
-            <h2 className="mb-3 flex items-center gap-2 text-2xl font-extrabold tracking-tight text-ink-800">
-              <UserRound className="h-5 w-5 text-brand-500" />
-              Информация о клиенте
-            </h2>
-            <div className="space-y-3">
-              <TextField
-                label="ФИО"
-                readOnly={isCustomerFieldsReadonly}
-                value={form.fullName}
-                onChange={(event) => setForm((state) => ({ ...state, fullName: event.target.value }))}
-              />
-              <TextField
-                label="Телефон"
-                type="tel"
-                inputMode="numeric"
-                maxLength={18}
-                placeholder="+7 (___) ___-__-__"
-                readOnly={isCustomerFieldsReadonly}
-                value={form.phone}
-                onChange={handlePhoneChange}
-              />
-              <TextField
-                label="Адрес доставки"
-                readOnly={isCustomerFieldsReadonly}
-                value={form.address}
-                onChange={(event) => setForm((state) => ({ ...state, address: event.target.value }))}
-                rightSlot={<MapPin className="h-4 w-4 text-slate-400" />}
-              />
-              <div className="grid grid-cols-2 gap-3">
+            {isCustomerInfoCollapsed ? (
+              <button
+                type="button"
+                onClick={() => setCustomerInfoCollapsed(false)}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left shadow-sm hover:bg-slate-100"
+                aria-expanded={false}
+                aria-label="Развернуть информацию о клиенте"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-100 text-brand-500">
+                    <UserRound className="h-6 w-6" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="mb-1 flex items-center justify-between gap-2">
+                      <span className="truncate text-[30px] font-extrabold leading-none tracking-tight text-ink-800">
+                        {collapsedCustomerName}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-brand-50 px-3 py-1 text-[11px] font-bold text-brand-600">
+                        {collapsedCustomerStatusLabel}
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-1 text-sm text-slate-500">
+                      <MapPin className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{collapsedCustomerAddress}</span>
+                    </span>
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+                </div>
+              </button>
+            ) : (
+              <>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-ink-800">
+                    <UserRound className="h-5 w-5 text-brand-500" />
+                    Информация о клиенте
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerInfoCollapsed(true)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                    aria-expanded
+                    aria-label="Свернуть информацию о клиенте"
+                  >
+                    Свернуть
+                    <ChevronDown className="h-4 w-4 rotate-180" />
+                  </button>
+                </div>
+              <div className="space-y-3">
                 <TextField
-                  label="Договор №"
+                  label="ФИО"
                   readOnly={isCustomerFieldsReadonly}
-                  value={form.contractNumber}
-                  onChange={(event) => setForm((state) => ({ ...state, contractNumber: event.target.value }))}
+                  value={form.fullName}
+                  onChange={(event) => setForm((state) => ({ ...state, fullName: event.target.value }))}
                 />
                 <TextField
-                  label="Дата готовности"
-                  placeholder="дд/мм/гггг"
+                  label="Телефон"
+                  type="tel"
                   inputMode="numeric"
-                  maxLength={10}
+                  maxLength={18}
+                  placeholder="+7 (___) ___-__-__"
                   readOnly={isCustomerFieldsReadonly}
-                  value={form.readinessDate}
-                  onChange={handleDateChange('readinessDate')}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <TextField
-                  label="Дата монтажа"
-                  placeholder="дд/мм/гггг"
-                  inputMode="numeric"
-                  maxLength={10}
-                  readOnly={isCustomerFieldsReadonly}
-                  value={form.installationDate}
-                  onChange={handleDateChange('installationDate')}
+                  value={form.phone}
+                  onChange={handlePhoneChange}
                 />
                 <TextField
-                  label="Комментарий"
-                  placeholder="Заметки..."
+                  label="Адрес доставки"
                   readOnly={isCustomerFieldsReadonly}
-                  value={form.comment}
-                  onChange={(event) => setForm((state) => ({ ...state, comment: event.target.value }))}
+                  value={form.address}
+                  onChange={(event) => setForm((state) => ({ ...state, address: event.target.value }))}
+                  rightSlot={<MapPin className="h-4 w-4 text-slate-400" />}
                 />
+                <div className="grid grid-cols-2 gap-3">
+                  <TextField
+                    label="Договор №"
+                    readOnly={isCustomerFieldsReadonly}
+                    value={form.contractNumber}
+                    onChange={(event) => setForm((state) => ({ ...state, contractNumber: event.target.value }))}
+                  />
+                  <TextField
+                    label="Дата готовности"
+                    placeholder="дд/мм/гггг"
+                    inputMode="numeric"
+                    maxLength={10}
+                    readOnly={isCustomerFieldsReadonly}
+                    value={form.readinessDate}
+                    onChange={handleDateChange('readinessDate')}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <TextField
+                    label="Дата монтажа"
+                    placeholder="дд/мм/гггг"
+                    inputMode="numeric"
+                    maxLength={10}
+                    readOnly={isCustomerFieldsReadonly}
+                    value={form.installationDate}
+                    onChange={handleDateChange('installationDate')}
+                  />
+                  <TextField
+                    label="Комментарий"
+                    placeholder="Заметки..."
+                    readOnly={isCustomerFieldsReadonly}
+                    value={form.comment}
+                    onChange={(event) => setForm((state) => ({ ...state, comment: event.target.value }))}
+                  />
+                </div>
               </div>
-            </div>
+              </>
+            )}
           </section>
 
           <section>
@@ -331,13 +388,13 @@ export const OrderDetailsPage = () => {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                    <div className="flex flex-col justify-between gap-2 border-t border-slate-200 pt-3">
                       <p className="text-[30px] font-extrabold leading-none text-ink-800">
                         {position.price > 0
                           ? formatCurrency(position.price, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                           : '—'}
                       </p>
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center mt-2  gap-2">
                         <button
                           type="button"
                           onClick={() => copyPosition(position.id)}
@@ -349,7 +406,7 @@ export const OrderDetailsPage = () => {
                         <button
                           type="button"
                           onClick={openCalculatorStep2}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-brand-500 hover:bg-slate-200"
+                          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-brand-500 hover:bg-slate-200"
                           aria-label="Редактировать позицию"
                         >
                           <Pencil className="h-4 w-4" />
@@ -385,7 +442,7 @@ export const OrderDetailsPage = () => {
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-            <div className="flex items-end justify-between gap-4">
+            <div className="flex flex-col justify-between gap-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Код заказа</p>
                 <p className="text-2xl font-extrabold tracking-tight text-ink-800">{orderDetailsMock.code}</p>
