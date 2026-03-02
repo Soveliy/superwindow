@@ -26,7 +26,22 @@ const areCredentialsMatched = (payload: LoginRequest, credentials: DevAuthCreden
 export const tryDevLogin = (payload: LoginRequest): LoginResponse | null => {
   const credentials = getDevCredentials();
 
-  if (!credentials || !areCredentialsMatched(payload, credentials)) {
+  if (!credentials) {
+    return null;
+  }
+
+  // For static demo builds (GitHub Pages) where API is not configured,
+  // authenticate locally and skip network requests completely.
+  if (!env.apiBaseUrl) {
+    const fallbackDealerId = payload.emailOrDealerId.trim() || credentials.dealerId;
+
+    return {
+      token: `demo-token-${Date.now()}`,
+      dealerId: fallbackDealerId,
+    };
+  }
+
+  if (!areCredentialsMatched(payload, credentials)) {
     return null;
   }
 
