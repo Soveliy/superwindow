@@ -42,8 +42,9 @@ jobs:
           VITE_DEV_AUTH_LOGIN: 'demo'
           VITE_DEV_AUTH_PASSWORD: 'demo123'
           VITE_DEV_AUTH_DEALER_ID: 'DEV-0001'
-        env:
-          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+      - name: Add SPA fallback page
+        run: cp dist/index.html dist/404.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

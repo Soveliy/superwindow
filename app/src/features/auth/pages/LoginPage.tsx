@@ -21,6 +21,7 @@ export const LoginPage = () => {
   const [isSubmitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const devAuthHint = getDevAuthHint();
+  const loginImageSrc = `${import.meta.env.BASE_URL}login-image.jpg`;
 
   useEffect(() => {
     if (authStorage.hasSession()) {
@@ -90,7 +91,7 @@ export const LoginPage = () => {
             </button>
           </p>
           <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
-            <img className="h-full w-full object-cover" src="/login-image.jpg" alt="" />
+            <img className="h-full w-full object-cover" src={loginImageSrc} alt="" />
           </div>
         </section>
       </main>
