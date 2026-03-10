@@ -11,6 +11,8 @@ const isUserOrOrgPagesRepo =
   repositoryName.toLowerCase() === `${repositoryOwner.toLowerCase()}.github.io`;
 const base = isGitHubActions && repositoryName !== undefined ? (isUserOrOrgPagesRepo ? '/' : `/${repositoryName}/`) : '/';
 const withBase = (path: string) => `${base}${path.replace(/^\//, '')}`;
+const useHashRouting = isGitHubActions && repositoryName !== undefined && !isUserOrOrgPagesRepo;
+const startUrl = useHashRouting ? `${base}#/login` : withBase('login');
 
 export default defineConfig({
   base,
@@ -19,9 +21,10 @@ export default defineConfig({
     tsconfigPaths(),
     VitePWA({
       registerType: 'autoUpdate',
+      selfDestroying: useHashRouting,
       includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        id: withBase('login'),
+        id: startUrl,
         name: 'SuperWindow - Кабинет дилера',
         short_name: 'Кабинет дилера',
         description: 'PWA-приложение для оформления заказов дилера',
@@ -31,7 +34,7 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         scope: base,
-        start_url: withBase('login'),
+        start_url: startUrl,
         icons: [
           {
             src: 'icons/icon-192.png',

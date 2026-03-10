@@ -43,8 +43,35 @@ jobs:
           VITE_DEV_AUTH_PASSWORD: 'demo123'
           VITE_DEV_AUTH_DEALER_ID: 'DEV-0001'
 
-      - name: Add SPA fallback page
-        run: cp dist/index.html dist/404.html
+      - name: Add GitHub Pages fallback page
+        run: |
+          OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          if [ "${REPO_NAME,,}" = "${OWNER_NAME,,}.github.io" ]; then
+            BASE_PATH=""
+          else
+            BASE_PATH="/${REPO_NAME}"
+          fi
+          cat > dist/404.html <<EOF
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>Redirecting...</title>
+              <script>
+                (function () {
+                  var basePath = "${BASE_PATH}";
+                  var routePath = window.location.pathname.slice(basePath.length) || "/";
+                  var query = window.location.search || "";
+                  var hash = window.location.hash || "";
+                  window.location.replace(basePath + "/#" + routePath + query + hash);
+                })();
+              </script>
+            </head>
+            <body></body>
+          </html>
+          EOF
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
