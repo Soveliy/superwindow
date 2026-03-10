@@ -1,7 +1,17 @@
-import { ordersMock, type OrderSummary } from '@/features/orders/model/orders.mock';
-import type { CalculatorPosition } from '@/features/calculator/model/positions.storage';
+import {
+  isCalculatorPosition,
+  normalizeCalculatorPosition,
+  type CalculatorPosition,
+} from '@/features/calculator/model/positions.storage';
+import {
+  ordersMock,
+  type DeliveryMode,
+  type OrderService,
+  type OrderSummary,
+} from '@/features/orders/model/orders.mock';
 
 const ORDER_DRAFTS_STORAGE_KEY = 'superwindow.orders.drafts.v1';
+const DEFAULT_MARGIN = '18%';
 
 export interface OrderCustomerForm {
   fullName: string;
@@ -18,6 +28,7 @@ interface StoredOrderDraft {
   form: OrderCustomerForm;
   amount: number | null;
   positions?: CalculatorPosition[];
+  services?: OrderService[];
   createdAt: string;
   updatedAt: string;
 }
@@ -31,25 +42,32 @@ const orderDateFormatter = new Intl.DateTimeFormat('ru-RU', {
 const isValidString = (value: unknown): value is string => typeof value === 'string';
 const isValidDraftAmount = (value: unknown): value is number | null | undefined =>
   typeof value === 'undefined' || value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0);
-const isValidOptionalNumber = (value: unknown): value is number | undefined =>
-  typeof value === 'undefined' || (typeof value === 'number' && Number.isFinite(value));
-const isValidCalculatorPosition = (value: unknown): value is CalculatorPosition => {
+
+const isValidDraftPositions = (value: unknown): value is CalculatorPosition[] | undefined =>
+  typeof value === 'undefined' || (Array.isArray(value) && value.every(isCalculatorPosition));
+
+const isDeliveryMode = (value: unknown): value is DeliveryMode => value === 'manual' || value === 'pickup';
+
+const isOrderService = (value: unknown): value is OrderService => {
   if (!value || typeof value !== 'object') {
     return false;
   }
 
-  const position = value as Partial<CalculatorPosition>;
+  const service = value as Partial<OrderService>;
 
-  return (
-    typeof position.id === 'number' &&
-    Number.isFinite(position.id) &&
-    isValidOptionalNumber(position.width) &&
-    isValidOptionalNumber(position.height) &&
-    isValidOptionalNumber(position.price)
-  );
+  if (service.type === 'installation') {
+    return typeof service.discount === 'number' && Number.isFinite(service.discount) && service.discount >= 0;
+  }
+
+  if (service.type === 'delivery') {
+    return isDeliveryMode(service.mode) && typeof service.price === 'number' && Number.isFinite(service.price) && service.price >= 0;
+  }
+
+  return false;
 };
-const isValidDraftPositions = (value: unknown): value is CalculatorPosition[] | undefined =>
-  typeof value === 'undefined' || (Array.isArray(value) && value.every(isValidCalculatorPosition));
+
+const isValidDraftServices = (value: unknown): value is OrderService[] | undefined =>
+  typeof value === 'undefined' || (Array.isArray(value) && value.every(isOrderService));
 
 const cloneForm = (form: OrderCustomerForm): OrderCustomerForm => ({
   fullName: form.fullName,
@@ -60,41 +78,37 @@ const cloneForm = (form: OrderCustomerForm): OrderCustomerForm => ({
   installationDate: form.installationDate,
   comment: form.comment,
 });
-const normalizePositionId = (value: number): number => Math.max(1, Math.trunc(value));
-const normalizePositionNumber = (value: number | undefined): number | undefined => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return undefined;
-  }
 
-  return Math.max(0, Math.trunc(value));
-};
 const normalizeDraftPositions = (positions: CalculatorPosition[] | undefined): CalculatorPosition[] => {
   if (!Array.isArray(positions)) {
     return [];
   }
 
-  return positions.filter(isValidCalculatorPosition).map((position) => {
-    const normalized: CalculatorPosition = {
-      id: normalizePositionId(position.id),
+  return positions.filter(isCalculatorPosition).map(normalizeCalculatorPosition);
+};
+
+const clonePositions = (positions: CalculatorPosition[]): CalculatorPosition[] => normalizeDraftPositions(positions);
+
+const cloneServices = (services: OrderService[] | undefined): OrderService[] => {
+  if (!Array.isArray(services)) {
+    return [];
+  }
+
+  return services.filter(isOrderService).map((service) => {
+    if (service.type === 'installation') {
+      return {
+        type: 'installation',
+        discount: Math.max(0, Math.round(service.discount)),
+      };
+    }
+
+    return {
+      type: 'delivery',
+      mode: service.mode,
+      price: Math.max(0, Math.round(service.price)),
     };
-    const width = normalizePositionNumber(position.width);
-    const height = normalizePositionNumber(position.height);
-    const price = normalizePositionNumber(position.price);
-
-    if (typeof width === 'number') {
-      normalized.width = width;
-    }
-    if (typeof height === 'number') {
-      normalized.height = height;
-    }
-    if (typeof price === 'number') {
-      normalized.price = price;
-    }
-
-    return normalized;
   });
 };
-const clonePositions = (positions: CalculatorPosition[]): CalculatorPosition[] => normalizeDraftPositions(positions);
 
 const isStorageAvailable = (): boolean => typeof window !== 'undefined' && Boolean(window.localStorage);
 
@@ -138,6 +152,7 @@ const isStoredOrderDraft = (value: unknown): value is StoredOrderDraft => {
     isOrderCustomerForm(draft.form) &&
     isValidDraftAmount(draft.amount) &&
     isValidDraftPositions(draft.positions) &&
+    isValidDraftServices(draft.services) &&
     isValidString(draft.createdAt) &&
     isValidString(draft.updatedAt)
   );
@@ -167,6 +182,7 @@ const parseOrderDrafts = (rawValue: string | null): StoredOrderDraft[] => {
       ...draft,
       amount: normalizeDraftAmount(draft.amount),
       positions: normalizeDraftPositions(draft.positions),
+      services: cloneServices(draft.services),
     }));
   } catch {
     return [];
@@ -218,6 +234,39 @@ const formatDraftDate = (isoDate: string): string => {
   return orderDateFormatter.format(parsedDate);
 };
 
+const resolveDraftLeadTime = (draft: StoredOrderDraft, baseOrder?: OrderSummary): string => {
+  const readinessDate = draft.form.readinessDate.trim();
+  const installationDate = draft.form.installationDate.trim();
+
+  if (readinessDate) {
+    return `до ${readinessDate}`;
+  }
+
+  if (installationDate) {
+    return `монтаж ${installationDate}`;
+  }
+
+  return baseOrder?.leadTime ?? 'Срок уточняется';
+};
+
+const resolveDraftCode = (draft: StoredOrderDraft, baseOrder?: OrderSummary): string => {
+  const contractNumber = draft.form.contractNumber.trim();
+
+  if (contractNumber) {
+    return contractNumber;
+  }
+
+  return baseOrder?.code ?? `SW-${extractOrderNumber(draft.id)}`;
+};
+
+const resolveDraftMargin = (draft: StoredOrderDraft, baseOrder?: OrderSummary): string => {
+  if (draft.amount !== null && draft.amount > 0) {
+    return DEFAULT_MARGIN;
+  }
+
+  return baseOrder?.margin ?? '—';
+};
+
 const mapDraftToSummary = (draft: StoredOrderDraft): OrderSummary => {
   const baseOrder = ordersMock.find((item) => item.id === draft.id);
   const customerName = draft.form.fullName.trim();
@@ -230,6 +279,9 @@ const mapDraftToSummary = (draft: StoredOrderDraft): OrderSummary => {
     amount: draft.amount ?? baseOrder?.amount ?? null,
     subtitle: baseOrder?.subtitle ?? 'Ожидание расчета',
     note: baseOrder?.note ?? 'Оценка',
+    leadTime: resolveDraftLeadTime(draft, baseOrder),
+    code: resolveDraftCode(draft, baseOrder),
+    margin: resolveDraftMargin(draft, baseOrder),
   };
 };
 
@@ -275,17 +327,29 @@ const getOrderPositions = (orderId: string): CalculatorPosition[] | null => {
   return clonePositions(draft.positions ?? []);
 };
 
+const getOrderServices = (orderId: string): OrderService[] | null => {
+  const draft = readOrderDrafts().find((item) => item.id === orderId);
+
+  if (!draft) {
+    return null;
+  }
+
+  return cloneServices(draft.services ?? []);
+};
+
 const saveOrder = (
   orderId: string,
   form: OrderCustomerForm,
   amount?: number | null,
   positions?: CalculatorPosition[],
+  services?: OrderService[],
 ): void => {
   const drafts = readOrderDrafts();
   const now = new Date().toISOString();
   const normalizedForm = cloneForm(form);
   const normalizedAmount = normalizeDraftAmount(amount);
   const normalizedPositions = clonePositions(positions ?? []);
+  const normalizedServices = cloneServices(services ?? []);
   const draftIndex = drafts.findIndex((item) => item.id === orderId);
 
   if (draftIndex === -1) {
@@ -294,6 +358,7 @@ const saveOrder = (
       form: normalizedForm,
       amount: normalizedAmount,
       positions: normalizedPositions,
+      services: normalizedServices,
       createdAt: now,
       updatedAt: now,
     });
@@ -303,6 +368,7 @@ const saveOrder = (
       form: normalizedForm,
       amount: typeof amount === 'undefined' ? drafts[draftIndex].amount : normalizedAmount,
       positions: typeof positions === 'undefined' ? drafts[draftIndex].positions ?? [] : normalizedPositions,
+      services: typeof services === 'undefined' ? drafts[draftIndex].services ?? [] : normalizedServices,
       updatedAt: now,
     };
   }
@@ -310,7 +376,12 @@ const saveOrder = (
   writeOrderDrafts(drafts);
 };
 
-const createOrder = (form: OrderCustomerForm, amount?: number | null, positions?: CalculatorPosition[]): string => {
+const createOrder = (
+  form: OrderCustomerForm,
+  amount?: number | null,
+  positions?: CalculatorPosition[],
+  services?: OrderService[],
+): string => {
   const drafts = readOrderDrafts();
   const orderId = getNextOrderId(drafts);
   const now = new Date().toISOString();
@@ -320,6 +391,7 @@ const createOrder = (form: OrderCustomerForm, amount?: number | null, positions?
     form: cloneForm(form),
     amount: normalizeDraftAmount(amount),
     positions: clonePositions(positions ?? []),
+    services: cloneServices(services ?? []),
     createdAt: now,
     updatedAt: now,
   });
@@ -334,6 +406,7 @@ export const ordersStorage = {
   getOrderById,
   getOrderForm,
   getOrderPositions,
+  getOrderServices,
   getOrders,
   saveOrder,
 };

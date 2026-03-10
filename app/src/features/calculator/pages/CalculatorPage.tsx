@@ -1,1024 +1,952 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  CircleHelp,
-  Copy,
-  Info,
-  MapPin,
-  Minus,
-  Pencil,
-  Plus,
-  Trash2,
-  UserRound,
-} from 'lucide-react';
+import { useEffect, useMemo, useState, type ButtonHTMLAttributes } from 'react';
+import { ArrowLeft, Check, ChevronRight, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
+  type AdditionalOptionType,
+  type CalculatorAdditionalOption,
+  type CalculatorPosition,
+  type CalculatorSashConfig,
+  type DrainageType,
+  type DripMaterial,
+  type HandlePosition,
+  type OpeningMode,
+  type OpeningType,
+  type PackageType,
+  type SashId,
+  type SealColor,
+  type SillColor,
   readCalculatorPositions,
   writeCalculatorPositions,
-  type CalculatorPosition,
 } from '@/features/calculator/model/positions.storage';
 import { cn } from '@/shared/lib/cn';
 import { formatCurrency } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/Button';
+import { Toggle } from '@/shared/ui/Toggle';
 
-type WizardStep = 1 | 2 | 3 | 4 | 5;
-type PackageType = 'budget' | 'standard' | 'premium';
-type OpeningType = 'single' | 'double' | 'triple' | 'balcony';
-type SealColor = 'black' | 'gray' | 'white';
-type DrainageType = 'front' | 'hidden';
-type Sash = 'left' | 'right';
-type OpeningMode = 'fixed' | 'turn' | 'tilt_turn' | 'fanlight';
-type SillBrand = 'moeller' | 'danke' | 'crystallit' | 'vitrage';
-type DripMaterial = 'aluminum' | 'polyester' | 'galvanized';
+type ProfileId = 'rula-58' | 'isotech-58' | 'grunder-60' | 'wintech-70' | 'exprof-arctica' | 'profecta-plus';
 
 interface CalculatorLocationState {
+  positionId?: number;
   resetPositions?: boolean;
-  startStep?: WizardStep;
   returnTo?: string;
 }
 
-const wizardSteps: Array<{ id: WizardStep; title: string }> = [
-  { id: 1, title: 'Состав заказа' },
-  { id: 2, title: 'Форма и размер' },
-  { id: 3, title: 'Выбор профиля' },
-  { id: 4, title: 'Открывание створок' },
-  { id: 5, title: 'Доп. опции' },
-];
-const CALCULATOR_FIRST_STEP: WizardStep = 2;
-const CALCULATOR_TOTAL_STEPS = 4;
-// const calculatorSteps = wizardSteps.filter((step) => step.id >= CALCULATOR_FIRST_STEP);
+interface DraftState {
+  width: number;
+  height: number;
+  packageType: PackageType;
+  openingType: OpeningType;
+  profileId: ProfileId;
+  drainage: DrainageType;
+  sealColor: SealColor;
+  sashes: CalculatorSashConfig[];
+  additionalOptions: CalculatorAdditionalOption[];
+}
 
-const openingTypes: Array<{ id: OpeningType; label: string }> = [
-  { id: 'single', label: '1 створка' },
-  { id: 'double', label: '2 створки' },
-  { id: 'triple', label: '3 створки' },
-  { id: 'balcony', label: 'Балкон' },
-];
+interface OptionFormState {
+  type: AdditionalOptionType;
+  length: number;
+  width: number;
+  sillColor: SillColor;
+  dripMaterial: DripMaterial;
+}
 
 const profileCatalog = [
-  {
-    id: 'rula-58',
-    label: 'Rula 58мм',
-    description: 'Базовый профиль для простых решений',
-    pricePerSquare: 3200,
-  },
-  {
-    id: 'isotech-58',
-    label: 'Isotech 58мм',
-    description: 'Надежный профиль по доступной цене',
-    pricePerSquare: 3500,
-  },
-  {
-    id: 'grunder-60',
-    label: 'Grunder 60 мм',
-    description: 'Оптимальное соотношение цены и тепла',
-    pricePerSquare: 4100,
-  },
-  {
-    id: 'wintech-70',
-    label: 'Wintech 70мм класс А',
-    description: 'Повышенная теплоизоляция, класс А',
-    pricePerSquare: 4700,
-  },
-  {
-    id: 'exprof-arctica',
-    label: 'Exprof Arctica',
-    description: 'Для холодных регионов и больших проемов',
-    pricePerSquare: 4900,
-  },
-  {
-    id: 'profecta-plus',
-    label: 'Profecta Plus',
-    description: 'Премиальная серия с тихим контуром',
-    pricePerSquare: 5600,
-  },
+  { id: 'rula-58', label: 'Rula 58мм', description: 'Базовый профиль', pricePerSquare: 3200 },
+  { id: 'isotech-58', label: 'Isotech 58мм', description: 'Надежный вариант', pricePerSquare: 3500 },
+  { id: 'grunder-60', label: 'Grunder 60 мм', description: 'Оптимальный баланс', pricePerSquare: 4100 },
+  { id: 'wintech-70', label: 'Wintech 70мм', description: 'Теплый профиль', pricePerSquare: 4700 },
+  { id: 'exprof-arctica', label: 'Exprof Arctica', description: 'Для холодных регионов', pricePerSquare: 4900 },
+  { id: 'profecta-plus', label: 'Profecta Plus', description: 'Премиальная серия', pricePerSquare: 5600 },
 ] as const;
 
-type ProfileId = (typeof profileCatalog)[number]['id'];
-
-const packageLabels: Array<{ id: PackageType; label: string; multiplier: number }> = [
-  { id: 'budget', label: 'Бюджет', multiplier: 1 },
-  { id: 'standard', label: 'Стандарт', multiplier: 1.12 },
-  { id: 'premium', label: 'Премиум', multiplier: 1.26 },
+const openingTypes: Array<{ id: OpeningType; label: string; factor: number }> = [
+  { id: 'single', label: '1 створка', factor: 1 },
+  { id: 'double', label: '2 створки', factor: 1.48 },
+  { id: 'triple', label: '3 створки', factor: 1.93 },
+  { id: 'balcony', label: 'Балкон', factor: 2.12 },
 ];
 
-const openingModeOptions: Array<{ id: OpeningMode; label: string; description: string; extra: number }> = [
-  { id: 'fixed', label: 'Глухое', description: 'Без открывания', extra: 0 },
-  { id: 'turn', label: 'Поворотное', description: 'Открытие в сторону', extra: 900 },
-  { id: 'tilt_turn', label: 'Поворотно-откидное', description: 'Универсальное', extra: 1500 },
-  { id: 'fanlight', label: 'Фрамужное', description: 'Только верх', extra: 700 },
+const packageOptions: Array<{ id: PackageType; label: string; factor: number }> = [
+  { id: 'budget', label: 'Бюджет', factor: 1 },
+  { id: 'standard', label: 'Стандарт', factor: 1.12 },
+  { id: 'premium', label: 'Премиум', factor: 1.26 },
 ];
 
-const accessoryList = [
-  { id: 'ext-sill', label: 'Внешний отлив (сталь)', price: 24 },
-  { id: 'int-sill', label: 'Внутренний подоконник (ПВХ)', price: 18 },
-  { id: 'under-sill', label: 'Подставочный профиль (30 мм)', price: 8.5 },
-] as const;
+const openingModes: Array<{ id: OpeningMode; label: string; price: number }> = [
+  { id: 'fixed', label: 'Глухое', price: 0 },
+  { id: 'turn', label: 'Поворотное', price: 900 },
+  { id: 'tilt_turn', label: 'Поворотно-откидное', price: 1500 },
+  { id: 'fanlight', label: 'Фрамужное', price: 700 },
+];
 
-const nextStepMap: Record<WizardStep, WizardStep> = {
-  1: 2,
-  2: 3,
-  3: 4,
-  4: 5,
-  5: 5,
+const openingSashMap: Record<OpeningType, SashId[]> = {
+  single: ['single'],
+  double: ['left', 'right'],
+  triple: ['left', 'center', 'right'],
+  balcony: ['left', 'right'],
 };
 
-const prevStepMap: Record<WizardStep, WizardStep> = {
-  1: 1,
-  2: 1,
-  3: 2,
-  4: 3,
-  5: 4,
+const sashLabels: Record<SashId, string> = {
+  single: 'Створка',
+  left: 'Левая',
+  center: 'Центральная',
+  right: 'Правая',
 };
 
-const openingMultiplier: Record<OpeningType, number> = {
-  single: 1,
-  double: 1.48,
-  triple: 1.93,
-  balcony: 2.12,
+const handleLabels: Record<HandlePosition, string> = {
+  none: 'Нет ручки',
+  left: 'Слева',
+  right: 'Справа',
+  top: 'Сверху',
 };
 
-const sealColorExtra: Record<SealColor, number> = {
-  black: 0,
-  gray: 180,
-  white: 220,
-};
+const sealColorOptions: Array<{ id: SealColor; label: string; extra: number }> = [
+  { id: 'black', label: 'Черный', extra: 0 },
+  { id: 'gray', label: 'Серый', extra: 180 },
+  { id: 'white', label: 'Белый', extra: 220 },
+];
 
-const drainageExtra: Record<DrainageType, number> = {
-  front: 0,
-  hidden: 420,
-};
+const drainageOptions: Array<{ id: DrainageType; label: string; extra: number }> = [
+  { id: 'bottom', label: 'Снизу', extra: 0 },
+  { id: 'front', label: 'Спереди', extra: 180 },
+  { id: 'hidden', label: 'Скрытое', extra: 420 },
+];
 
-const dripMaterialExtra: Record<DripMaterial, number> = {
-  aluminum: 350,
-  polyester: 210,
-  galvanized: 120,
-};
+const sillColorOptions: Array<{ id: SillColor; label: string; extra: number }> = [
+  { id: 'white', label: 'Белый', extra: 0 },
+  { id: 'brown', label: 'Коричневый', extra: 260 },
+  { id: 'anthracite', label: 'Антрацит', extra: 380 },
+];
 
-const sillBrandExtra: Record<SillBrand, number> = {
-  moeller: 620,
-  danke: 560,
-  crystallit: 490,
-  vitrage: 450,
-};
+const dripMaterialOptions: Array<{ id: DripMaterial; label: string; extra: number }> = [
+  { id: 'aluminum', label: 'Алюминий', extra: 450 },
+  { id: 'polyester', label: 'Полиэстер', extra: 260 },
+  { id: 'galvanized', label: 'Оцинковка', extra: 120 },
+];
 
-const isWizardStep = (value: unknown): value is WizardStep =>
-  value === 1 || value === 2 || value === 3 || value === 4 || value === 5;
+const defaultDrainage: DrainageType = 'bottom';
+const defaultSealColor: SealColor = 'black';
 
 const clampDimension = (value: number): number => Math.max(500, Math.min(3200, value));
+const clampOptionLength = (value: number): number => Math.max(300, Math.min(6000, value));
+const clampOptionWidth = (value: number): number => Math.max(50, Math.min(1000, value));
+const normalizePositionId = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.trunc(value)) : null;
+const isProfileId = (value: string | undefined): value is ProfileId => profileCatalog.some((item) => item.id === value);
 
-const Toggle = ({ checked, onToggle }: { checked: boolean; onToggle: () => void }) => (
+const getOpeningModePrice = (mode: OpeningMode): number =>
+  openingModes.find((item) => item.id === mode)?.price ?? 0;
+
+const getDefaultHandlePosition = (mode: OpeningMode, sashId: SashId): HandlePosition => {
+  if (mode === 'fixed') {
+    return 'none';
+  }
+  if (mode === 'fanlight') {
+    return 'top';
+  }
+  return sashId === 'right' ? 'left' : 'right';
+};
+
+const getHandleOptions = (mode: OpeningMode): HandlePosition[] => {
+  if (mode === 'fixed') {
+    return ['none'];
+  }
+  if (mode === 'fanlight') {
+    return ['top'];
+  }
+  return ['left', 'right'];
+};
+
+const createDefaultSash = (id: SashId, openingType: OpeningType): CalculatorSashConfig => {
+  const mode =
+    openingType === 'single'
+      ? 'tilt_turn'
+      : openingType === 'triple' && id === 'center'
+        ? 'tilt_turn'
+        : openingType === 'balcony' && id === 'right'
+          ? 'turn'
+          : id === 'left'
+            ? 'turn'
+            : 'fixed';
+
+  return {
+    id,
+    mode,
+    handlePosition: getDefaultHandlePosition(mode, id),
+    mosquitoScreenEnabled: false,
+  };
+};
+
+const normalizeSashes = (openingType: OpeningType, sashes: CalculatorSashConfig[]): CalculatorSashConfig[] => {
+  const nextIds = openingSashMap[openingType];
+  const byId = new Map(sashes.map((sash) => [sash.id, sash]));
+
+  return nextIds.map((id, index) => {
+    const fallback = byId.get(id) ?? sashes[index];
+    const base = createDefaultSash(id, openingType);
+    const mode = fallback?.mode ?? base.mode ?? 'fixed';
+    const handleOptions = getHandleOptions(mode);
+    const handlePosition =
+      fallback?.handlePosition && handleOptions.includes(fallback.handlePosition)
+        ? fallback.handlePosition
+        : getDefaultHandlePosition(mode, id);
+
+    return {
+      id,
+      mode,
+      handlePosition,
+      mosquitoScreenEnabled: fallback?.mosquitoScreenEnabled ?? base.mosquitoScreenEnabled ?? false,
+    };
+  });
+};
+
+const createLegacySashes = (position: CalculatorPosition, openingType: OpeningType): CalculatorSashConfig[] => {
+  const next = normalizeSashes(openingType, []);
+  const left = next.find((sash) => sash.id === 'single' || sash.id === 'left');
+  const right = next.find((sash) => sash.id === 'right');
+
+  if (left && position.leftSashMode) {
+    left.mode = position.leftSashMode;
+    left.handlePosition = getDefaultHandlePosition(position.leftSashMode, left.id);
+    left.mosquitoScreenEnabled = position.mosquitoScreenEnabled ?? false;
+  }
+
+  if (right && position.rightSashMode) {
+    right.mode = position.rightSashMode;
+    right.handlePosition = getDefaultHandlePosition(position.rightSashMode, right.id);
+  }
+
+  return next;
+};
+
+const createDefaultDraft = (): DraftState => ({
+  width: 1300,
+  height: 1400,
+  packageType: 'standard',
+  openingType: 'double',
+  profileId: 'grunder-60',
+  drainage: defaultDrainage,
+  sealColor: defaultSealColor,
+  sashes: normalizeSashes('double', []),
+  additionalOptions: [],
+});
+
+const createDefaultOptionForm = (): OptionFormState => ({
+  type: 'sill',
+  length: 1300,
+  width: 300,
+  sillColor: 'white',
+  dripMaterial: 'aluminum',
+});
+
+const createDraftFromPosition = (position?: CalculatorPosition): DraftState => {
+  const defaults = createDefaultDraft();
+
+  if (!position) {
+    return defaults;
+  }
+
+  const openingType = position.openingType ?? defaults.openingType;
+  const sashes =
+    position.sashes && position.sashes.length > 0
+      ? normalizeSashes(openingType, position.sashes)
+      : normalizeSashes(openingType, createLegacySashes(position, openingType));
+
+  return {
+    width: clampDimension(position.width ?? defaults.width),
+    height: clampDimension(position.height ?? defaults.height),
+    packageType: position.packageType ?? defaults.packageType,
+    openingType,
+    profileId: isProfileId(position.profileId) ? position.profileId : defaults.profileId,
+    drainage: defaultDrainage,
+    sealColor: defaultSealColor,
+    sashes,
+    additionalOptions: position.additionalOptions ?? [],
+  };
+};
+
+const getOptionPrice = (option: CalculatorAdditionalOption): number => {
+  const length = option.length ?? 0;
+  const width = option.width ?? 0;
+  const area = (length * width) / 1_000_000;
+
+  if (option.type === 'sill') {
+    const colorExtra = sillColorOptions.find((item) => item.id === option.sillColor)?.extra ?? 0;
+    return Math.round(area * 8200 + colorExtra);
+  }
+
+  const materialExtra = dripMaterialOptions.find((item) => item.id === option.dripMaterial)?.extra ?? 0;
+  return Math.round(area * 6100 + materialExtra);
+};
+
+const ChoiceButton = ({
+  active,
+  className,
+  disabled,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { active: boolean }) => (
   <button
-    type="button"
-    onClick={onToggle}
+    disabled={disabled}
+    {...props}
     className={cn(
-      'relative inline-flex h-6 w-11 items-center border border-slate-300 transition-colors',
-      checked ? 'bg-brand-500' : 'bg-slate-200',
+      'flex items-center justify-center gap-1 border px-3 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:hover:border-slate-200',
+      active ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 bg-slate-50 hover:border-slate-300',
+      disabled ? 'opacity-60' : null,
+      className,
     )}
-  >
-    <span
-      className={cn(
-        'inline-block h-5 w-5 bg-surface transition-transform',
-        checked ? 'translate-x-5 border border-brand-500' : 'translate-x-1 border border-slate-400',
-      )}
-    />
-  </button>
+  />
 );
 
 export const CalculatorPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const locationState = location.state as CalculatorLocationState | null;
-  const shouldResetPositions = locationState?.resetPositions === true;
-  const initialStep = isWizardStep(locationState?.startStep) ? locationState.startStep : CALCULATOR_FIRST_STEP;
-  const returnTo =
-    typeof locationState?.returnTo === 'string' && locationState.returnTo.length > 0
-      ? locationState.returnTo
-      : '/orders/new';
-
-  const [currentStep, setCurrentStep] = useState<WizardStep>(initialStep);
-  const [selectedProfile, setSelectedProfile] = useState<ProfileId>('grunder-60');
-  const [selectedPackage, setSelectedPackage] = useState<PackageType>('standard');
-  const [selectedOpeningType, setSelectedOpeningType] = useState<OpeningType>('double');
-  const [sealColor, setSealColor] = useState<SealColor>('black');
-  const [drainage, setDrainage] = useState<DrainageType>('front');
-  const [height, setHeight] = useState(1400);
-  const [width, setWidth] = useState(1300);
-  const [mosquitoScreenEnabled, setMosquitoScreenEnabled] = useState(true);
-  const [selectedAccessories, setSelectedAccessories] = useState<Record<string, boolean>>({
-    'ext-sill': false,
-    'int-sill': true,
-    'under-sill': false,
-  });
-  const [positions, setPositions] = useState<CalculatorPosition[]>(() =>
-    shouldResetPositions ? [] : readCalculatorPositions(),
-  );
-  const [activeSash, setActiveSash] = useState<Sash>('left');
-  const [sashModes, setSashModes] = useState<Record<Sash, OpeningMode>>({
-    left: 'tilt_turn',
-    right: 'fixed',
-  });
-  const [sillDepth, setSillDepth] = useState(300);
-  const [sillBrand, setSillBrand] = useState<SillBrand>('moeller');
-  const [dripWidth, setDripWidth] = useState(150);
-  const [dripMaterial, setDripMaterial] = useState<DripMaterial>('aluminum');
-  const [turnTiltHardware, setTurnTiltHardware] = useState(false);
-  const [childLock, setChildLock] = useState(false);
-
-  const selectedProfileConfig = profileCatalog.find((profile) => profile.id === selectedProfile) ?? profileCatalog[0];
-  const selectedPackageConfig = packageLabels.find((item) => item.id === selectedPackage) ?? packageLabels[1];
-  const selectedOpeningConfig = openingTypes.find((item) => item.id === selectedOpeningType) ?? openingTypes[0];
-
-  const totalPrice = useMemo(() => {
-    const area = (width * height) / 1_000_000;
-    const baseCost = area * selectedProfileConfig.pricePerSquare * openingMultiplier[selectedOpeningType];
-    const openingCost = openingModeOptions.reduce((acc, option) => {
-      if (sashModes.left === option.id) {
-        acc += option.extra;
-      }
-      if (sashModes.right === option.id) {
-        acc += option.extra;
-      }
-      return acc;
-    }, 0);
-
-    const accessoriesCost = accessoryList.reduce((acc, accessory) => {
-      if (!selectedAccessories[accessory.id]) {
-        return acc;
-      }
-
-      return acc + accessory.price * 100;
-    }, 0);
-
-    const optionsCost =
-      (mosquitoScreenEnabled ? 900 : 0) +
-      (turnTiltHardware ? 1400 : 0) +
-      (childLock ? 700 : 0) +
-      sealColorExtra[sealColor] +
-      drainageExtra[drainage] +
-      dripMaterialExtra[dripMaterial] +
-      sillBrandExtra[sillBrand] +
-      dripWidth * 2 +
-      sillDepth * 1.8;
-
-    return Math.round((baseCost + openingCost + accessoriesCost + optionsCost) * selectedPackageConfig.multiplier);
-  }, [
-    childLock,
-    drainage,
-    dripMaterial,
-    dripWidth,
-    height,
-    mosquitoScreenEnabled,
-    sashModes,
-    sealColor,
-    selectedAccessories,
-    selectedOpeningType,
-    selectedPackageConfig.multiplier,
-    selectedProfileConfig.pricePerSquare,
-    sillBrand,
-    sillDepth,
-    turnTiltHardware,
-    width,
-  ]);
-
-  const orderPositions = useMemo(
-    () =>
-      positions.map((position, index) => {
-        const sizeWidth = clampDimension(width + index * 80);
-        const sizeHeight = clampDimension(height + index * 60);
-        const price = Math.round(totalPrice * (1 + index * 0.18));
-
-        return {
-          ...position,
-          opening: selectedOpeningConfig.label,
-          profile: selectedProfileConfig.label,
-          width: sizeWidth,
-          height: sizeHeight,
-          price,
-        };
-      }),
-    [height, positions, selectedOpeningConfig.label, selectedProfileConfig.label, totalPrice, width],
-  );
+  const state = location.state as CalculatorLocationState | null;
+  const returnTo = typeof state?.returnTo === 'string' && state.returnTo.length > 0 ? state.returnTo : '/orders/new';
+  const requestedPositionId = normalizePositionId(state?.positionId);
+  const [positions, setPositions] = useState<CalculatorPosition[]>([]);
+  const [positionId, setPositionId] = useState(requestedPositionId ?? 1);
+  const [draft, setDraft] = useState<DraftState>(() => createDefaultDraft());
+  const [activeSashId, setActiveSashId] = useState<SashId>('left');
+  const [isOptionDialogOpen, setOptionDialogOpen] = useState(false);
+  const [editingOptionId, setEditingOptionId] = useState<number | null>(null);
+  const [optionForm, setOptionForm] = useState<OptionFormState>(() => createDefaultOptionForm());
 
   useEffect(() => {
-    const positionsForStorage: CalculatorPosition[] = orderPositions.map((position) => ({
-      id: position.id,
-      width: position.width,
-      height: position.height,
-      price: position.price,
+    const storedPositions = state?.resetPositions ? [] : readCalculatorPositions();
+    const nextPositionId =
+      requestedPositionId ?? (storedPositions.length > 0 ? Math.max(...storedPositions.map((item) => item.id)) + 1 : 1);
+    const currentPosition = storedPositions.find((item) => item.id === nextPositionId);
+    const nextDraft = createDraftFromPosition(currentPosition);
+
+    setPositions(storedPositions);
+    setPositionId(nextPositionId);
+    setDraft(nextDraft);
+    setActiveSashId(openingSashMap[nextDraft.openingType][0]);
+  }, [location.key, requestedPositionId, state?.resetPositions]);
+
+  const currentProfile = profileCatalog.find((item) => item.id === draft.profileId) ?? profileCatalog[2];
+  const currentPackage = packageOptions.find((item) => item.id === draft.packageType) ?? packageOptions[1];
+  const currentOpening = openingTypes.find((item) => item.id === draft.openingType) ?? openingTypes[1];
+  const sashIds = openingSashMap[draft.openingType];
+  const activeSash = draft.sashes.find((sash) => sash.id === activeSashId) ?? draft.sashes[0];
+
+  useEffect(() => {
+    if (!sashIds.includes(activeSashId)) {
+      setActiveSashId(sashIds[0]);
+    }
+  }, [activeSashId, sashIds]);
+
+  const totalPrice = useMemo(() => {
+    const area = (draft.width * draft.height) / 1_000_000;
+    const sashPrice = draft.sashes.reduce((total, sash) => {
+      const openingPrice = sash.mode ? getOpeningModePrice(sash.mode) : 0;
+      const mosquitoPrice = sash.mosquitoScreenEnabled ? 900 : 0;
+      return total + openingPrice + mosquitoPrice;
+    }, 0);
+    const sealExtra = sealColorOptions.find((item) => item.id === draft.sealColor)?.extra ?? 0;
+    const drainageExtra = drainageOptions.find((item) => item.id === draft.drainage)?.extra ?? 0;
+    const optionPrice = draft.additionalOptions.reduce((total, option) => total + getOptionPrice(option), 0);
+
+    return Math.round((area * currentProfile.pricePerSquare * currentOpening.factor + sashPrice + sealExtra + drainageExtra + optionPrice) * currentPackage.factor);
+  }, [currentOpening.factor, currentPackage.factor, currentProfile.pricePerSquare, draft]);
+
+  const setOpeningType = (openingType: OpeningType): void => {
+    setDraft((value) => ({
+      ...value,
+      openingType,
+      sashes: normalizeSashes(openingType, value.sashes),
+    }));
+    setActiveSashId(openingSashMap[openingType][0]);
+  };
+
+  const setSashMode = (sashId: SashId, mode: OpeningMode): void => {
+    setDraft((value) => ({
+      ...value,
+      sashes: value.sashes.map((sash) =>
+        sash.id === sashId
+          ? { ...sash, mode, handlePosition: getDefaultHandlePosition(mode, sashId) }
+          : sash,
+      ),
+    }));
+  };
+
+  const setSashHandle = (sashId: SashId, handlePosition: HandlePosition): void => {
+    setDraft((value) => ({
+      ...value,
+      sashes: value.sashes.map((sash) => (sash.id === sashId ? { ...sash, handlePosition } : sash)),
+    }));
+  };
+
+  const toggleSashMosquito = (sashId: SashId): void => {
+    setDraft((value) => ({
+      ...value,
+      sashes: value.sashes.map((sash) =>
+        sash.id === sashId ? { ...sash, mosquitoScreenEnabled: !sash.mosquitoScreenEnabled } : sash,
+      ),
+    }));
+  };
+
+  const openAddOptionDialog = (): void => {
+    setEditingOptionId(null);
+    setOptionForm(createDefaultOptionForm());
+    setOptionDialogOpen(true);
+  };
+
+  const openEditOptionDialog = (option: CalculatorAdditionalOption): void => {
+    setEditingOptionId(option.id);
+    setOptionForm({
+      type: option.type,
+      length: option.length ?? 1300,
+      width: option.width ?? (option.type === 'sill' ? 300 : 150),
+      sillColor: option.sillColor ?? 'white',
+      dripMaterial: option.dripMaterial ?? 'aluminum',
+    });
+    setOptionDialogOpen(true);
+  };
+
+  const saveOption = (): void => {
+    const nextOption: CalculatorAdditionalOption = {
+      id:
+        editingOptionId ??
+        (draft.additionalOptions.length > 0 ? Math.max(...draft.additionalOptions.map((item) => item.id)) + 1 : 1),
+      type: optionForm.type,
+      length: clampOptionLength(optionForm.length),
+      width: clampOptionWidth(optionForm.width),
+      sillColor: optionForm.type === 'sill' ? optionForm.sillColor : undefined,
+      dripMaterial: optionForm.type === 'drip' ? optionForm.dripMaterial : undefined,
+    };
+
+    setDraft((value) => ({
+      ...value,
+      additionalOptions: [
+        ...value.additionalOptions.filter((item) => item.id !== nextOption.id),
+        nextOption,
+      ].sort((first, second) => first.id - second.id),
+    }));
+    setOptionDialogOpen(false);
+  };
+
+  const removeOption = (optionId: number): void => {
+    setDraft((value) => ({
+      ...value,
+      additionalOptions: value.additionalOptions.filter((item) => item.id !== optionId),
     }));
 
-    writeCalculatorPositions(positionsForStorage);
-  }, [orderPositions]);
-
-  const displayStep = Math.min(CALCULATOR_TOTAL_STEPS, Math.max(1, currentStep - 1));
-  const headerTitle = wizardSteps.find((step) => step.id === currentStep)?.title ?? 'Калькулятор';
-  const isLastStep = currentStep === 5;
-
-  const footerPrice = totalPrice;
-  const footerLabel = 'Стоимость';
-
-  const toggleAccessory = (id: string): void => {
-    setSelectedAccessories((state) => ({
-      ...state,
-      [id]: !state[id],
-    }));
-  };
-
-  const adjustDimension = (type: 'width' | 'height', delta: number): void => {
-    if (type === 'width') {
-      setWidth((value) => clampDimension(value + delta));
-      return;
+    if (editingOptionId === optionId) {
+      setOptionDialogOpen(false);
     }
-
-    setHeight((value) => clampDimension(value + delta));
   };
 
-  const applyDimensionFromInput = (value: string, type: 'width' | 'height'): void => {
-    const digits = value.replace(/\D/g, '');
-    const nextValue = digits ? clampDimension(Number.parseInt(digits, 10)) : 500;
+  const save = (): void => {
+    const leftSash = draft.sashes.find((sash) => sash.id === 'left' || sash.id === 'single');
+    const rightSash = draft.sashes.find((sash) => sash.id === 'right');
+    const nextPosition: CalculatorPosition = {
+      id: positionId,
+      width: draft.width,
+      height: draft.height,
+      price: totalPrice,
+      packageType: draft.packageType,
+      openingType: draft.openingType,
+      profileId: draft.profileId,
+      drainage: draft.drainage,
+      sealColor: draft.sealColor,
+      sashes: draft.sashes,
+      additionalOptions: draft.additionalOptions,
+      leftSashMode: leftSash?.mode,
+      rightSashMode: rightSash?.mode,
+      mosquitoScreenEnabled: draft.sashes.some((sash) => sash.mosquitoScreenEnabled),
+    };
+    const nextPositions = [...positions.filter((item) => item.id !== positionId), nextPosition].sort((a, b) => a.id - b.id);
 
-    if (type === 'width') {
-      setWidth(nextValue);
-      return;
-    }
-
-    setHeight(nextValue);
+    writeCalculatorPositions(nextPositions);
+    navigate(returnTo, { state: { calculatorPositions: nextPositions } });
   };
-
-  const addPosition = (): void => {
-    setPositions((state) => {
-      const nextId = state.length > 0 ? Math.max(...state.map((item) => item.id)) + 1 : 1;
-
-      return [...state, { id: nextId }];
-    });
-  };
-
-  const handleAddWindow = (): void => {
-    addPosition();
-    setCurrentStep(2);
-  };
-
-  const copyPosition = (positionId: number): void => {
-    setPositions((state) => {
-      const source = state.find((item) => item.id === positionId);
-
-      if (!source) {
-        return state;
-      }
-
-      const nextId = Math.max(...state.map((item) => item.id)) + 1;
-
-      return [...state, { ...source, id: nextId }];
-    });
-  };
-
-  const removePosition = (positionId: number): void => {
-    setPositions((state) => state.filter((item) => item.id !== positionId));
-  };
-
-  const goBack = (): void => {
-    if (currentStep === 1 || currentStep === initialStep) {
-      navigate(returnTo);
-      return;
-    }
-
-    setCurrentStep(prevStepMap[currentStep]);
-  };
-
-  const goNext = (): void => {
-    if (isLastStep) {
-      navigate(returnTo);
-      return;
-    }
-
-    setCurrentStep(nextStepMap[currentStep]);
-  };
-
-  const openingModeForActiveSash = sashModes[activeSash];
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
       <main className="mx-auto w-full max-w-[576px] bg-surface shadow-panel">
         <header className="border-b border-slate-200 px-4 pb-4 pt-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <button
               type="button"
+              onClick={() => navigate(returnTo)}
               className="inline-flex h-9 w-9 items-center justify-center border border-slate-300 bg-slate-100 text-ink-700 transition-colors hover:bg-slate-200"
-              onClick={goBack}
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <h1 className="text-center text-base font-extrabold text-ink-800">
-              {`Шаг ${displayStep} из ${CALCULATOR_TOTAL_STEPS}: ${headerTitle}`}
-            </h1>
-            {currentStep === CALCULATOR_FIRST_STEP ? (
-              <button
-                type="button"
-                className="inline-flex h-9 w-9 items-center justify-center border border-slate-300 bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200"
-              >
-                <CircleHelp className="h-4 w-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => navigate(returnTo)}
-                className="px-2 text-sm font-semibold text-slate-500 hover:text-ink-700"
-              >
-                Отмена
-              </button>
-            )}
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Позиция {positionId}</p>
+              <h1 className="text-base font-extrabold text-ink-800">Калькулятор</h1>
+            </div>
+            <button type="button" onClick={() => navigate(returnTo)} className="px-2 text-sm font-semibold text-slate-500 hover:text-ink-700">
+              Отмена
+            </button>
           </div>
-
-          {/* <div className="flex items-center gap-1">
-            {calculatorSteps.map((step) => (
-              <span
-                key={step.id}
-                className={cn(
-                  'h-1.5 flex-1 border border-slate-300 bg-slate-200 transition-colors',
-                  step.id <= currentStep && 'border-brand-500 bg-brand-500',
-                )}
-              />
-            ))}
-          </div> */}
         </header>
 
         <section className="space-y-5 px-4 pb-36 pt-4">
-          {currentStep === 1 ? (
-            <section className="space-y-4">
-              <article className="border border-slate-200 bg-slate-50 px-3 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="inline-flex h-12 w-12 items-center justify-center bg-slate-100 text-brand-500">
-                      <UserRound className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-ink-800">Новый клиент</p>
-                      <p className="mt-0.5 flex items-center gap-1 text-sm text-slate-500">
-                        <MapPin className="h-3.5 w-3.5" />
-                        Адрес будет заполнен в заказе
-                      </p>
-                    </div>
-                  </div>
-                  <span className="border border-slate-300 bg-brand-50 px-2 py-1 text-[11px] font-bold text-brand-600">
-                    Черновик
-                  </span>
-                </div>
-              </article>
+          <article className="border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Текущая конфигурация</p>
+            <div className="mt-2 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-2xl font-extrabold leading-none text-ink-800">
+                  {draft.width} x {draft.height} мм
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  {currentOpening.label} · {currentProfile.label} · {currentPackage.label}
+                </p>
+              </div>
+              <p className="text-[30px] font-extrabold leading-none text-ink-800">
+                {formatCurrency(totalPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+          </article>
 
-              <div className="flex items-end justify-between">
-                <h2 className="text-2xl font-extrabold text-ink-800">Позиции</h2>
-                <span className="text-sm font-semibold text-slate-500">{positions.length} шт.</span>
+          <section className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {openingTypes.map((item) => (
+                <ChoiceButton key={item.id} type="button" active={draft.openingType === item.id} onClick={() => setOpeningType(item.id)}>
+                  <span className="mb-3 block h-14 border border-slate-300 bg-slate-100" />
+                  <span className="text-sm font-bold text-ink-700">{item.label}</span>
+                </ChoiceButton>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDraft((value) => ({ ...value, width: clampDimension(value.width - 50) }))}
+                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <label className="flex h-12 flex-1 items-center justify-center gap-2 border border-brand-400 bg-slate-50 px-3">
+                  <input
+                    value={draft.width}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      setDraft((value) => ({
+                        ...value,
+                        width: clampDimension(Number.parseInt(event.target.value.replace(/\D/g, '') || '500', 10)),
+                      }))
+                    }
+                    className="w-full border-none bg-transparent text-center text-[34px] font-extrabold leading-none text-ink-800 outline-none"
+                  />
+                  <span className="text-sm font-semibold text-slate-500">мм</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setDraft((value) => ({ ...value, width: clampDimension(value.width + 50) }))}
+                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
               </div>
 
-              {orderPositions.length === 0 ? (
-                <div className="border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-slate-500">
-                  Пока нет добавленных окон
-                </div>
-              ) : null}
-              <div className="space-y-3">
-                {orderPositions.map((position) => (
-                  <article key={position.id} className="border border-slate-200 bg-slate-50 px-3 py-3">
-                    <div className="mb-3 flex items-start gap-3">
-                      <div className="inline-flex h-20 w-20 items-center justify-center border border-slate-300 bg-slate-100">
-                        <div className="h-10 w-10 border border-slate-400">
-                          <div className="h-full w-1/2 border-r border-slate-400" />
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xl font-extrabold text-ink-800">
-                          Позиция {position.id}
-                        </p>
-                        <p className="text-sm font-medium text-slate-500">{position.opening}</p>
-                        <p className="mt-2 text-[28px] font-extrabold leading-none text-ink-800">
-                          {position.width} x {position.height} мм
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">{position.profile}</p>
-                      </div>
-                    </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDraft((value) => ({ ...value, height: clampDimension(value.height - 50) }))}
+                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <label className="flex h-12 flex-1 items-center justify-center gap-2 border border-slate-300 bg-slate-50 px-3">
+                  <input
+                    value={draft.height}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      setDraft((value) => ({
+                        ...value,
+                        height: clampDimension(Number.parseInt(event.target.value.replace(/\D/g, '') || '500', 10)),
+                      }))
+                    }
+                    className="w-full border-none bg-transparent text-center text-[34px] font-extrabold leading-none text-ink-800 outline-none"
+                  />
+                  <span className="text-sm font-semibold text-slate-500">мм</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setDraft((value) => ({ ...value, height: clampDimension(value.height + 50) }))}
+                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
 
-                    <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
-                      <p className="text-[32px] font-extrabold leading-none text-ink-800">
-                        {formatCurrency(position.price)}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => copyPosition(position.id)}
-                          className="inline-flex h-9 items-center gap-1 border border-slate-300 bg-slate-100 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-200"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex h-9 w-9 items-center justify-center border border-slate-300 bg-slate-100 text-brand-500 hover:bg-slate-200"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removePosition(position.id)}
-                          className="inline-flex h-9 w-9 items-center justify-center border border-slate-300 bg-slate-100 text-slate-400 hover:bg-slate-200"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Дренажное отверстие</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {drainageOptions.map((item) => (
+                    <ChoiceButton
+                      key={item.id}
+                      type="button"
+                      active={defaultDrainage === item.id}
+                      disabled
+                      className="h-10 px-2 text-center text-xs font-semibold"
+                    >
+                      {item.label}
+                    </ChoiceButton>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Цвет уплотнителя</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {sealColorOptions.map((item) => (
+                    <ChoiceButton
+                      key={item.id}
+                      type="button"
+                      active={defaultSealColor === item.id}
+                      disabled
+                      className="h-10 px-2 text-center text-xs font-semibold"
+                    >
+                      {item.label}
+                    </ChoiceButton>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              {packageOptions.map((item) => (
+                <ChoiceButton
+                  key={item.id}
+                  type="button"
+                  active={draft.packageType === item.id}
+                  onClick={() => setDraft((value) => ({ ...value, packageType: item.id }))}
+                  className="h-11 text-center text-sm font-semibold"
+                >
+                  {item.label}
+                </ChoiceButton>
+              ))}
+            </div>
+
+            <div className=" grid grid-cols-1 space-y-2 gap-1">
+              {profileCatalog.map((item) => (
+                <ChoiceButton
+                  key={item.id}
+                  type="button"
+                  active={draft.profileId === item.id}
+                  onClick={() => setDraft((value) => ({ ...value, profileId: item.id }))}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <div>
+                    <p className="text-lg font-extrabold">{item.label}</p>
+                    <p className="text-sm text-slate-500">{item.description}</p>
+                  </div>
+                  <div className="text-right">
+                    {/* <p className="text-lg font-extrabold">{formatCurrency(item.pricePerSquare)}/м²</p> */}
+                    <span
+                      className={cn(
+                        'mt-2 inline-flex h-6 w-6 items-center justify-center border rounded-full',
+                        draft.profileId === item.id
+                          ? 'border-brand-500 bg-white text-slate-100'
+                          : 'border-slate-300 bg-slate-100 text-slate-100',
+                      )}
+                    >
+                      <Check className="h-4 w-4" />
+                    </span>
+                  </div>
+                </ChoiceButton>
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className={cn('grid gap-2', sashIds.length === 1 ? 'grid-cols-1' : sashIds.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
+              {sashIds.map((sashId) => {
+                const sash = draft.sashes.find((item) => item.id === sashId);
+
+                return (
+                  <button
+                    key={sashId}
+                    type="button"
+                    onClick={() => setActiveSashId(sashId)}
+                    className={cn(
+                      'rounded-xl border px-3 py-3 text-left transition-colors',
+                      activeSashId === sashId
+                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        : 'border-slate-200 bg-white hover:border-slate-300',
+                    )}
+                  >
+                    <p className="text-sm font-extrabold">{sashLabels[sashId]}</p>
+                    <p className="mt-1 text-xs text-slate-500">{sash?.mode ? openingModes.find((item) => item.id === sash.mode)?.label : '—'}</p>
+                    <p className="mt-2 text-xs text-slate-500">{sash?.handlePosition ? handleLabels[sash.handlePosition] : '—'}</p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {openingModes.map((item) => (
+                <ChoiceButton
+                  key={item.id}
+                  type="button"
+                  active={activeSash?.mode === item.id}
+                  onClick={() => activeSash && setSashMode(activeSash.id, item.id)}
+                >
+                  <p className="text-sm font-extrabold">{item.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">+{formatCurrency(item.price)}</p>
+                </ChoiceButton>
+              ))}
+            </div>
+
+            {activeSash ? (
+              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Ручка</p>
+                  <div className={cn('grid gap-2', getHandleOptions(activeSash.mode ?? 'fixed').length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
+                    {getHandleOptions(activeSash.mode ?? 'fixed').map((item) => (
+                      <ChoiceButton
+                        key={item}
+                        type="button"
+                        active={activeSash.handlePosition === item}
+                        onClick={() => setSashHandle(activeSash.id, item)}
+                        className="h-10 px-2 text-center text-sm font-semibold"
+                      >
+                        {handleLabels[item]}
+                      </ChoiceButton>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-end">
+                  <div className="w-full rounded-xl border px-3 py-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-ink-700">Москитная сетка</p>
+                        <p className="text-xs text-slate-500">{sashLabels[activeSash.id]} створка</p>
                       </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={activeSash.mosquitoScreenEnabled ?? false}
+                        aria-label="Toggle mosquito screen"
+                        className="inline-flex"
+                        onClick={() => toggleSashMosquito(activeSash.id)}
+                      >
+                        <Toggle checked={activeSash.mosquitoScreenEnabled ?? false} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-extrabold text-ink-800">Дополнительные опции</h2>
+                <p className="text-sm text-slate-500">Мини-корзина подоконников и отливов</p>
+              </div>
+              <button
+                type="button"
+                onClick={openAddOptionDialog}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 text-sm font-semibold text-brand-600 hover:bg-brand-100"
+              >
+                <Plus className="h-4 w-4" />
+                Добавить опцию
+              </button>
+            </div>
+
+            {draft.additionalOptions.length > 0 ? (
+              <div className="space-y-3">
+                {draft.additionalOptions.map((option) => (
+                  <article key={option.id} className="rounded-xl border border-slate-200 px-3 py-3 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-ink-800">{option.type === 'sill' ? 'Подоконник' : 'Отлив'}</p>
+                        <p className="mt-1 text-sm text-slate-500">{`${option.length ?? 0} x ${option.width ?? 0} мм`}</p>
+                        <p className="text-sm text-slate-500">
+                          {option.type === 'sill'
+                            ? `Цвет: ${sillColorOptions.find((item) => item.id === option.sillColor)?.label ?? 'Белый'}`
+                            : `Материал: ${dripMaterialOptions.find((item) => item.id === option.dripMaterial)?.label ?? 'Алюминий'}`}
+                        </p>
+                      </div>
+                      <p className="text-lg font-extrabold text-ink-800">{formatCurrency(getOptionPrice(option))}</p>
+                    </div>
+                    <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => openEditOptionDialog(option)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-brand-500 hover:bg-slate-200"
+                        aria-label="Редактировать опцию"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeOption(option.id)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-400 hover:bg-slate-200"
+                        aria-label="Удалить опцию"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </article>
                 ))}
               </div>
-
-              <button
-                type="button"
-                onClick={handleAddWindow}
-                className="flex h-12 w-full items-center justify-center gap-2 border border-brand-400 bg-brand-50 text-base font-bold text-brand-600 hover:bg-brand-100"
-              >
-                <Plus className="h-5 w-5" />
-                Добавить еще одно окно
-              </button>
-            </section>
-          ) : null}
-
-          {currentStep === 2 ? (
-            <section className="space-y-6">
-              <div>
-                <h2 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-500">Тип конструкции</h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {openingTypes.map((type) => {
-                    const isActive = selectedOpeningType === type.id;
-
-                    return (
-                      <button
-                        key={type.id}
-                        type="button"
-                        onClick={() => setSelectedOpeningType(type.id)}
-                        className={cn(
-                          'border px-3 py-3 text-left transition-colors',
-                          isActive
-                            ? 'border-brand-500 bg-brand-50 shadow-sm'
-                            : 'border-slate-200 bg-slate-50 hover:border-slate-300',
-                        )}
-                      >
-                        <span className="mb-3 block h-14 border border-slate-300 bg-slate-100" />
-                        <span className="text-sm font-bold text-ink-700">{type.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-300  px-4 py-6 text-center text-slate-500">
+                Пока дополнительные опции не добавлены
               </div>
-
-              <div className="space-y-4">
-                <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Размеры</h2>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => adjustDimension('width', -50)}
-                      className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </button>
-                    <label className="flex h-12 flex-1 items-center justify-center gap-2 border border-brand-400 bg-slate-50 px-3">
-                      <input
-                        value={width}
-                        inputMode="numeric"
-                        onChange={(event) => applyDimensionFromInput(event.target.value, 'width')}
-                        className="w-full border-none bg-transparent text-center text-[34px] font-extrabold leading-none text-ink-800 outline-none"
-                      />
-                      <span className="text-sm font-semibold text-slate-500">мм</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => adjustDimension('width', 50)}
-                      className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => adjustDimension('height', -50)}
-                      className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </button>
-                    <label className="flex h-12 flex-1 items-center justify-center gap-2 border border-slate-300 bg-slate-50 px-3">
-                      <input
-                        value={height}
-                        inputMode="numeric"
-                        onChange={(event) => applyDimensionFromInput(event.target.value, 'height')}
-                        className="w-full border-none bg-transparent text-center text-[34px] font-extrabold leading-none text-ink-800 outline-none"
-                      />
-                      <span className="text-sm font-semibold text-slate-500">мм</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => adjustDimension('height', 50)}
-                      className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
-          ) : null}
-
-          {currentStep === 3 ? (
-            <section className="space-y-4">
-              <div>
-                <h2 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-500">Комплектация</h2>
-                <div className="grid grid-cols-3 gap-2">
-                  {packageLabels.map((item) => {
-                    const isActive = item.id === selectedPackage;
-
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setSelectedPackage(item.id)}
-                        className={cn(
-                          'h-11 border text-sm font-semibold transition-colors',
-                          isActive
-                            ? 'border-brand-500 bg-brand-50 text-brand-700'
-                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300',
-                        )}
-                      >
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <h2 className="text-[30px] font-extrabold leading-none text-ink-800">Варианты профилей</h2>
-              <div className="space-y-2">
-                {profileCatalog.map((profile) => {
-                  const isActive = selectedProfile === profile.id;
-
-                  return (
-                    <button
-                      key={profile.id}
-                      type="button"
-                      onClick={() => setSelectedProfile(profile.id)}
-                      className={cn(
-                        'flex w-full items-center justify-between gap-3 border px-3 py-3 text-left transition-colors',
-                        isActive
-                          ? 'border-brand-500 bg-brand-50 text-brand-700'
-                          : 'border-slate-200 bg-slate-50 hover:border-slate-300',
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-20 w-16 border border-slate-300 bg-slate-100" />
-                        <div>
-                          <p className="text-2xl font-extrabold leading-none">{profile.label}</p>
-                          <p className="mt-1 text-sm text-slate-500">{profile.description}</p>
-                          <p className="mt-2 text-[28px] font-extrabold leading-none">
-                            {formatCurrency(profile.pricePerSquare)}/м²
-                          </p>
-                        </div>
-                      </div>
-                      <span
-                        className={cn(
-                          'flex-shrink-0 inline-flex h-6 w-6 items-center justify-center border',
-                          isActive
-                            ? 'border-brand-500 bg-brand-500 text-surface'
-                            : 'border-slate-300 bg-slate-100 text-slate-100',
-                        )}
-                      >
-                        <Check className="h-4 w-4" />
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ) : null}
-
-          {currentStep === 4 ? (
-            <section className="space-y-4">
-              <div className="border border-slate-200 bg-slate-50 px-3 py-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Конфигурация: {width}x{height}мм
-                </p>
-                <div className="grid h-44 grid-cols-2 border border-slate-300 bg-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSash('left')}
-                    className={cn(
-                      'relative border-r border-slate-300 px-2 py-2 text-left',
-                      activeSash === 'left' && 'bg-brand-50',
-                    )}
-                  >
-                    <span className="text-xs font-semibold text-slate-500">Левая створка</span>
-                    <span
-                      className={cn(
-                        'absolute inset-2 border border-slate-400',
-                        activeSash === 'left' && 'border-brand-500',
-                      )}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSash('right')}
-                    className={cn('relative px-2 py-2 text-left', activeSash === 'right' && 'bg-brand-50')}
-                  >
-                    <span className="text-xs font-semibold text-slate-500">Правая створка</span>
-                    <span
-                      className={cn(
-                        'absolute inset-2 border border-slate-400',
-                        activeSash === 'right' && 'border-brand-500',
-                      )}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 border border-slate-200 bg-slate-100 p-1">
-                <button
-                  type="button"
-                  onClick={() => setActiveSash('left')}
-                  className={cn(
-                    'h-10 text-sm font-semibold transition-colors',
-                    activeSash === 'left' ? 'bg-slate-50 text-ink-700 shadow-sm' : 'text-slate-500',
-                  )}
-                >
-                  Левая створка
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSash('right')}
-                  className={cn(
-                    'h-10 text-sm font-semibold transition-colors',
-                    activeSash === 'right' ? 'bg-slate-50 text-ink-700 shadow-sm' : 'text-slate-500',
-                  )}
-                >
-                  Правая створка
-                </button>
-              </div>
-
-              <div>
-                <h2 className="mb-3 text-2xl font-extrabold text-ink-800">Тип открывания</h2>
-                <p className="mb-3 text-sm text-slate-500">
-                  Выберите механизм для {activeSash === 'left' ? 'левой' : 'правой'} створки
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {openingModeOptions.map((option) => {
-                    const isActive = openingModeForActiveSash === option.id;
-
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => setSashModes((state) => ({ ...state, [activeSash]: option.id }))}
-                        className={cn(
-                          'border px-3 py-3 text-left transition-colors',
-                          isActive
-                            ? 'border-brand-500 bg-brand-50 text-brand-700'
-                            : 'border-slate-200 bg-slate-50 hover:border-slate-300',
-                        )}
-                      >
-                        <div className="mb-2 h-10 w-10 border border-slate-300 bg-slate-100" />
-                        <p className="text-sm font-extrabold">{option.label}</p>
-                        <p className="text-xs text-slate-500">{option.description}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
-          ) : null}
-
-          {currentStep === 5 ? (
-            <section className="space-y-4">
-              <article className="border border-slate-200 bg-slate-50 px-3 py-3">
-                <h2 className="mb-3 text-lg font-extrabold text-ink-800">Подоконники</h2>
-                <div className="mb-3 flex items-center justify-between text-sm font-semibold">
-                  <span className="text-slate-500">Глубина</span>
-                  <span className="text-brand-600">{sillDepth} мм</span>
-                </div>
-                <input
-                  type="range"
-                  min={100}
-                  max={600}
-                  step={10}
-                  value={sillDepth}
-                  onChange={(event) => setSillDepth(Number(event.target.value))}
-                  className="w-full accent-brand-500"
-                />
-
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  {([
-                    { id: 'moeller', label: 'Moeller' },
-                    { id: 'danke', label: 'Danke' },
-                    { id: 'crystallit', label: 'Crystallit' },
-                    { id: 'vitrage', label: 'Vitrage' },
-                  ] as Array<{ id: SillBrand; label: string }>).map((brand) => {
-                    const isActive = sillBrand === brand.id;
-
-                    return (
-                      <button
-                        key={brand.id}
-                        type="button"
-                        onClick={() => setSillBrand(brand.id)}
-                        className={cn(
-                          'h-10 border text-sm font-semibold transition-colors',
-                          isActive
-                            ? 'border-brand-500 bg-brand-50 text-brand-700'
-                            : 'border-slate-200 bg-slate-100 text-slate-600 hover:border-slate-300',
-                        )}
-                      >
-                        {brand.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </article>
-
-              <article className="border border-slate-200 bg-slate-50 px-3 py-3">
-                <h2 className="mb-3 text-lg font-extrabold text-ink-800">Отливы</h2>
-                <div className="mb-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDripWidth((value) => Math.max(80, value - 10))}
-                    className="inline-flex h-10 w-10 items-center justify-center border border-slate-300 bg-slate-100 text-slate-600"
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <div className="flex h-10 flex-1 items-center justify-center border border-slate-300 bg-slate-100 text-lg font-extrabold text-ink-800">
-                    {dripWidth} мм
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setDripWidth((value) => Math.min(400, value + 10))}
-                    className="inline-flex h-10 w-10 items-center justify-center border border-slate-300 bg-slate-100 text-slate-600"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    { id: 'aluminum', label: 'Алюминий' },
-                    { id: 'polyester', label: 'Полиэстер' },
-                    { id: 'galvanized', label: 'Оцинковка' },
-                  ] as Array<{ id: DripMaterial; label: string }>).map((item) => {
-                    const isActive = dripMaterial === item.id;
-
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setDripMaterial(item.id)}
-                        className={cn(
-                          'h-10 border text-xs font-semibold transition-colors',
-                          isActive
-                            ? 'border-brand-500 bg-brand-50 text-brand-700'
-                            : 'border-slate-200 bg-slate-100 text-slate-600 hover:border-slate-300',
-                        )}
-                      >
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </article>
-
-              <article className="space-y-3 border border-slate-200 bg-slate-50 px-3 py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-ink-700">Москитная сетка</p>
-                    <p className="text-xs text-slate-500">Стандартный антимоскит</p>
-                  </div>
-                  <Toggle checked={mosquitoScreenEnabled} onToggle={() => setMosquitoScreenEnabled((value) => !value)} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-ink-700">Поворотно-откидной</p>
-                    <p className="text-xs text-slate-500">Механизм открывания</p>
-                  </div>
-                  <Toggle checked={turnTiltHardware} onToggle={() => setTurnTiltHardware((value) => !value)} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-ink-700">Детский замок</p>
-                    <p className="text-xs text-slate-500">Блокировка ручки</p>
-                  </div>
-                  <Toggle checked={childLock} onToggle={() => setChildLock((value) => !value)} />
-                </div>
-              </article>
-
-              <article className="border border-slate-200 bg-slate-50 px-3 py-3">
-                <h2 className="mb-3 text-lg font-extrabold text-ink-800">Дополнительно</h2>
-
-                <div className="mb-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Цвет уплотнителя</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([
-                      { id: 'black', label: 'Черный' },
-                      { id: 'gray', label: 'Серый' },
-                      { id: 'white', label: 'Белый' },
-                    ] as Array<{ id: SealColor; label: string }>).map((item) => {
-                      const isActive = sealColor === item.id;
-
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setSealColor(item.id)}
-                          className={cn(
-                            'h-10 border text-sm font-semibold transition-colors',
-                            isActive
-                              ? 'border-brand-500 bg-brand-50 text-brand-700'
-                              : 'border-slate-200 bg-slate-100 text-slate-600 hover:border-slate-300',
-                          )}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="mb-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Дренаж</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDrainage('front')}
-                      className={cn(
-                        'h-10 border text-sm font-semibold transition-colors',
-                        drainage === 'front'
-                          ? 'border-brand-500 bg-brand-50 text-brand-700'
-                          : 'border-slate-200 bg-slate-100 text-slate-600 hover:border-slate-300',
-                      )}
-                    >
-                      Спереди
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDrainage('hidden')}
-                      className={cn(
-                        'h-10 border text-sm font-semibold transition-colors',
-                        drainage === 'hidden'
-                          ? 'border-brand-500 bg-brand-50 text-brand-700'
-                          : 'border-slate-200 bg-slate-100 text-slate-600 hover:border-slate-300',
-                      )}
-                    >
-                      Скрытый
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {accessoryList.map((item) => (
-                    <label
-                      key={item.id}
-                      className="flex items-center justify-between gap-3 border border-slate-200 bg-slate-100 px-3 py-2 text-sm"
-                    >
-                      <span className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 border-slate-300 text-brand-500 focus:ring-brand-300"
-                          checked={selectedAccessories[item.id]}
-                          onChange={() => toggleAccessory(item.id)}
-                        />
-                        <span className="font-medium text-ink-700">{item.label}</span>
-                      </span>
-                      <span className="font-semibold text-brand-600">
-                        +{formatCurrency(item.price, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </article>
-            </section>
-          ) : null}
+            )}
+          </section>
         </section>
 
         <footer className="fixed bottom-0 left-1/2 z-10 w-[calc(100%-1rem)] max-w-[560px] -translate-x-1/2 border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-panel backdrop-blur-sm">
           <div className="mb-3 flex items-end justify-between gap-2">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{footerLabel}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Стоимость</p>
               <p className="text-[38px] font-extrabold leading-none tracking-tight text-ink-800">
-                {formatCurrency(footerPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatCurrency(totalPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <span className="inline-flex items-center gap-1 border border-slate-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-600">
-              <Info className="h-3.5 w-3.5" />
-              {`Шаг ${displayStep}/${CALCULATOR_TOTAL_STEPS}`}
+              {currentOpening.label}
             </span>
           </div>
-          <Button className="h-12 text-base" onClick={goNext}>
-            {isLastStep ? 'Завершить расчет' : 'Далее'}
+          <Button className="h-12 text-base" onClick={save}>
+            Сохранить позицию
             <ChevronRight className="h-4 w-4" />
           </Button>
         </footer>
       </main>
+
+      {isOptionDialogOpen ? (
+        <div className="fixed inset-0 z-20 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">
+          <div className="w-full max-w-[540px] rounded-xl bg-surface p-4 shadow-panel">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-extrabold text-ink-800">
+                  {editingOptionId === null ? 'Добавить опцию' : 'Редактировать опцию'}
+                </h3>
+                <p className="text-sm text-slate-500">Подоконник или отлив с размерами</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOptionDialogOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                aria-label="Закрыть"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <ChoiceButton
+                  type="button"
+                  active={optionForm.type === 'sill'}
+                  onClick={() => setOptionForm((value) => ({ ...value, type: 'sill' }))}
+                  className="h-11 text-center text-sm font-semibold"
+                >
+                  Подоконник
+                </ChoiceButton>
+                <ChoiceButton
+                  type="button"
+                  active={optionForm.type === 'drip'}
+                  onClick={() => setOptionForm((value) => ({ ...value, type: 'drip' }))}
+                  className="h-11 text-center text-sm font-semibold"
+                >
+                  Отлив
+                </ChoiceButton>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Длина, мм</span>
+                  <input
+                    value={optionForm.length}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      setOptionForm((value) => ({
+                        ...value,
+                        length: clampOptionLength(Number.parseInt(event.target.value.replace(/\D/g, '') || '300', 10)),
+                      }))
+                    }
+                    className="w-full border-none bg-transparent text-lg font-extrabold text-ink-800 outline-none"
+                  />
+                </label>
+                <label className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ширина, мм</span>
+                  <input
+                    value={optionForm.width}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      setOptionForm((value) => ({
+                        ...value,
+                        width: clampOptionWidth(Number.parseInt(event.target.value.replace(/\D/g, '') || '50', 10)),
+                      }))
+                    }
+                    className="w-full border-none bg-transparent text-lg font-extrabold text-ink-800 outline-none"
+                  />
+                </label>
+              </div>
+
+              {optionForm.type === 'sill' ? (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Цвет подоконника</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {sillColorOptions.map((item) => (
+                      <ChoiceButton
+                        key={item.id}
+                        type="button"
+                        active={optionForm.sillColor === item.id}
+                        onClick={() => setOptionForm((value) => ({ ...value, sillColor: item.id }))}
+                        className="h-10 px-2 text-center text-xs font-semibold"
+                      >
+                        {item.label}
+                      </ChoiceButton>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Материал отлива</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {dripMaterialOptions.map((item) => (
+                      <ChoiceButton
+                        key={item.id}
+                        type="button"
+                        active={optionForm.dripMaterial === item.id}
+                        onClick={() => setOptionForm((value) => ({ ...value, dripMaterial: item.id }))}
+                        className="h-10 px-2 text-center text-xs font-semibold"
+                      >
+                        {item.label}
+                      </ChoiceButton>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                {editingOptionId !== null ? (
+                  <button
+                    type="button"
+                    onClick={() => removeOption(editingOptionId)}
+                    className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                  >
+                    Удалить
+                  </button>
+                ) : null}
+                <Button className="h-12 flex-1 text-base" onClick={saveOption}>
+                  Сохранить опцию
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

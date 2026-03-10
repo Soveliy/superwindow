@@ -1,13 +1,20 @@
+import { useState } from 'react';
 import { ArrowLeft, CheckCircle2, Clock3, UserRound } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
+import { getOrderStatusUi } from '@/features/orders/model/order-status';
 import { ordersStorage } from '@/features/orders/model/orders.storage';
+import { cn } from '@/shared/lib/cn';
 import { formatCurrency } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/Button';
+import { Toggle } from '@/shared/ui/Toggle';
+
+type PaymentMode = 'full' | 'installment';
 
 export const PaymentPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('full');
   const orderId = searchParams.get('orderId')?.trim() ?? '';
   const order = orderId ? ordersStorage.getOrderById(orderId) : undefined;
   const orderForm = orderId ? ordersStorage.getOrderForm(orderId) : null;
@@ -17,8 +24,7 @@ export const PaymentPage = () => {
   const totalAmount = order?.amount ?? 0;
   const installmentAmount = totalAmount > 0 ? totalAmount / 3 : 0;
   const backPath = orderId ? `/orders/${orderId}` : '/orders/new';
-  const paymentStatusLabel =
-    order?.status === 'paid' ? 'Оплачен' : order?.status === 'ready' ? 'Готов' : 'Ожидает';
+  const paymentStatus = getOrderStatusUi(order?.status);
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
@@ -42,8 +48,8 @@ export const PaymentPage = () => {
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Номер заказа</p>
                 <p className="text-3xl font-extrabold tracking-tight text-ink-800">#{orderId || '—'}</p>
               </div>
-              <span className="rounded-full bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-600">
-                {paymentStatusLabel}
+              <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${paymentStatus.badgeClassName}`}>
+                {paymentStatus.label}
               </span>
             </div>
 
@@ -68,16 +74,38 @@ export const PaymentPage = () => {
             </div>
 
             <p className="mb-2 text-sm font-bold text-ink-800">Способ оплаты</p>
-            <div className="space-y-2">
-              <label className="flex items-center justify-between rounded-xl border border-brand-500 bg-brand-50 px-3 py-3">
-                <span className='flex flex-col'>
+            <div role="radiogroup" aria-label="Payment mode" className="space-y-2">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={paymentMode === 'full'}
+                onClick={() => setPaymentMode('full')}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition-colors',
+                  paymentMode === 'full'
+                    ? 'border-brand-500 bg-brand-50'
+                    : 'border-slate-200 bg-slate-50 hover:border-slate-300',
+                )}
+              >
+                <span className="flex flex-col">
                   <span className="font-semibold text-ink-800">Полная оплата</span>
                   <span className="text-xs text-slate-500">Оплатить всю сумму сразу</span>
                 </span>
-                <input type="radio" name="payment-mode" defaultChecked />
-              </label>
-              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                <span className='flex flex-col'>
+                <Toggle checked={paymentMode === 'full'} />
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={paymentMode === 'installment'}
+                onClick={() => setPaymentMode('installment')}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition-colors',
+                  paymentMode === 'installment'
+                    ? 'border-brand-500 bg-brand-50'
+                    : 'border-slate-200 bg-slate-50 hover:border-slate-300',
+                )}
+              >
+                <span className="flex flex-col">
                   <span className="font-semibold text-ink-800">Рассрочка</span>
                   <span className="text-xs text-slate-500">
                     {`3 ежемесячных платежа по ${formatCurrency(installmentAmount, {
@@ -86,8 +114,8 @@ export const PaymentPage = () => {
                     })}`}
                   </span>
                 </span>
-                <input type="radio" name="payment-mode" />
-              </label>
+                <Toggle checked={paymentMode === 'installment'} />
+              </button>
             </div>
           </article>
 
@@ -103,7 +131,7 @@ export const PaymentPage = () => {
             </span>
           </article>
 
-          <Button className="h-14 text-base flex">
+          <Button className="flex h-14 text-base">
             <CheckCircle2 className="h-4 w-4" />
             Подтвердить оплату вручную
           </Button>

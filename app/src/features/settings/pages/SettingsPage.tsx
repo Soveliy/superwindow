@@ -55,7 +55,7 @@ export const SettingsPage = () => {
               <UserRound className="h-8 w-8" />
             </div>
             <p className="text-[30px] font-extrabold leading-none tracking-tight text-ink-800">
-              Оконный дилерский центр Джона
+            Дилерский центр
             </p>
             <p className="mt-1 text-sm text-slate-500">john.dealer@example.com</p>
             <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-brand-600">ID дилера #88234</p>

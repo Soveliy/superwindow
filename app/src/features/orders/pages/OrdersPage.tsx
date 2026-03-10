@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Bell, CalendarDays, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
+import { getOrderStatusUi } from '@/features/orders/model/order-status';
 import { type OrderStatus, type OrderSummary } from '@/features/orders/model/orders.mock';
 import { ordersStorage } from '@/features/orders/model/orders.storage';
 import { cn } from '@/shared/lib/cn';
@@ -14,25 +15,6 @@ interface FilterOption {
   label: string;
 }
 
-const statusUi: Record<OrderStatus, { label: string; className: string }> = {
-  ready: {
-    label: 'ГОТОВ',
-    className: 'bg-brand-50 text-brand-600',
-  },
-  in_progress: {
-    label: 'В РАБОТЕ',
-    className: 'bg-slate-100 text-ink-700',
-  },
-  paid: {
-    label: 'ОПЛАЧЕН',
-    className: 'bg-brand-100 text-brand-600',
-  },
-  new: {
-    label: 'НОВЫЙ',
-    className: 'bg-slate-100 text-ink-600',
-  },
-};
-
 const filterOptions: FilterOption[] = [
   { id: 'all', label: 'Все' },
   { id: 'new', label: 'Новые' },
@@ -42,25 +24,46 @@ const filterOptions: FilterOption[] = [
 ];
 
 const OrderCard = ({ order }: { order: OrderSummary }) => {
-  const status = statusUi[order.status];
+  const status = getOrderStatusUi(order.status);
   const amount = order.amount === null ? '—' : formatCurrency(order.amount);
 
   return (
     <Link
       to={`/orders/${order.id}`}
-      className="block rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm transition-shadow hover:shadow-md"
+      className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-[30px] font-extrabold leading-none tracking-tight text-ink-800">{order.id}</p>
           <p className="mt-1 text-sm text-slate-500">
-            {order.date} - {order.customer}
+            {order.date} · {order.customer}
           </p>
         </div>
-        <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
+        <span
+          className={`rounded-full border px-2 py-1 text-[12px] font-bold uppercase tracking-wide ${status.badgeClassName}`}
+        >
+          {status.label}
+        </span>
       </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
+          <p className="font-semibold uppercase tracking-wide text-slate-400">Срок</p>
+          <p className="mt-1 font-bold text-ink-700">{order.leadTime}</p>
+        </div>
+        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
+          <p className="font-semibold uppercase tracking-wide text-slate-400">Код / маржа</p>
+          <p className="mt-1 font-bold text-ink-700">
+            {order.code} · {order.margin}
+          </p>
+        </div>
+      </div>
+
       <div className="flex items-end justify-between gap-3">
-        <p className="text-sm font-medium text-slate-500">{order.subtitle}</p>
+        <div>
+          <p className="text-sm font-medium text-slate-500">{order.subtitle}</p>
+          <p className="mt-1 text-xs text-slate-400">{order.note}</p>
+        </div>
         <div className="text-right">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             {order.amount === null ? 'Оценка' : 'Сумма'}
@@ -102,7 +105,7 @@ export const OrdersPage = () => {
   return (
     <div className="min-h-screen bg-page px-2 py-3">
       <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel">
-        <section className="min-h-[calc(100vh-1.5rem)] relative flex-1 px-4 pb-36 pt-5">
+        <section className="relative min-h-[calc(100vh-1.5rem)] flex-1 px-4 pb-36 pt-5">
           <header className="mb-4 flex items-center justify-between">
             <h1 className="text-[42px] font-extrabold leading-none tracking-tight text-ink-800">Заказы</h1>
             <div className="flex items-center gap-1">
@@ -151,8 +154,10 @@ export const OrdersPage = () => {
                   type="button"
                   onClick={() => setActiveFilter(filterOption.id)}
                   className={cn(
-                    'rounded-full whitespace-nowrap border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-50 transition-colors hover:bg-slate-100',
-                    isActive && 'border-slate-300',
+                    'rounded-full whitespace-nowrap border px-5 py-2 text-sm font-semibold transition-colors',
+                    isActive
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100',
                   )}
                 >
                   {filterOption.label}
@@ -176,7 +181,7 @@ export const OrdersPage = () => {
           <button
             type="button"
             onClick={() => navigate('/orders/new', { state: { resetCalculatorPositions: true } })}
-            className="fixed bottom-20 right-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-50  transition-colors hover:bg-slate-100"
+            className="fixed bottom-20 right-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-100 transition-colors hover:bg-slate-100"
             aria-label="Создать заказ"
           >
             <Plus className="h-7 w-7" />

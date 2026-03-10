@@ -1,4 +1,4 @@
-import { Calculator, CreditCard, LayoutList, Settings } from 'lucide-react';
+import { LayoutList, Settings } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/shared/lib/cn';
 
@@ -8,16 +8,16 @@ const tabs = [
     label: 'Заказы',
     icon: LayoutList,
   },
-  {
-    to: '/calculator',
-    label: 'Калькулятор',
-    icon: Calculator,
-  },
-  {
-    to: '/payment',
-    label: 'Оплата',
-    icon: CreditCard,
-  },
+  // {
+  //   to: '/calculator',
+  //   label: 'Калькулятор',
+  //   icon: Calculator,
+  // },
+  // {
+  //   to: '/payment',
+  //   label: 'Оплата',
+  //   icon: CreditCard,
+  // },
   {
     to: '/settings',
     label: 'Настройки',
@@ -28,7 +28,7 @@ const tabs = [
 export const BottomNav = () => {
   return (
     <nav className="fixed w-full left-0 bottom-0 border-t border-slate-200 bg-surface/95 px-2 pb-2  pt-2 backdrop-blur-sm">
-      <ul className="grid grid-cols-4 gap-1">
+      <ul className="grid grid-cols-2 gap-1">
         {tabs.map((tab) => (
           <li key={tab.to}>
             <NavLink

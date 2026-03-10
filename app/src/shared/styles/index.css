@@ -7,6 +7,7 @@
 @layer base {
   :root {
     color-scheme: dark;
+    --radius-base: 10px;
     --color-page: 23 23 23;
     --color-surface: 31 31 31;
     --color-error: 221 70 25;
@@ -84,7 +85,7 @@
   *,
   *::before,
   *::after {
-    border-radius: 0 !important;
+    border-radius: var(--radius-base);
   }
 
   html,
