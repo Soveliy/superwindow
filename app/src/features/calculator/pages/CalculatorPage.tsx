@@ -738,7 +738,7 @@ export const CalculatorPage = () => {
                     const handlePosition = sash?.handlePosition ?? getDefaultHandlePosition(mode, sashId);
                     const isActive = activeSashId === sashId;
                     const mosquitoEnabled = sash?.mosquitoScreenEnabled ?? false;
-                    const isTwoItems = previewSashIds.length === 2;
+
 
                     return (
                       <button
@@ -748,7 +748,8 @@ export const CalculatorPage = () => {
                         className={cn(
                           'relative rounded-0 text-left transition-all',
                           //  index !== 0 && 'ml-[-2px]'
-                          isTwoItems ? 'w-[calc(50%-2px)]' : 'min-w-36',
+                          previewSashIds.length === 1 ? 'w-full' : (previewSashIds.length === 2) ? 'w-[calc(50%-2px)]' : 'min-w-36',
+
                           isActive
                             ? 'z-40'
                             : 'opacity-20',
@@ -767,7 +768,7 @@ export const CalculatorPage = () => {
                           ) : null}
                         </span>
 
-                        <span className="absolute inset-y-8 rounded-sm overflow-hidden border-2 border-white">
+                        <span className="absolute inset-y-8 rounded-sm overflow-hidden border-4 border-white">
 
 
                           <img className="h-full w-full object-cover rounded-none opacity-50" src={`${import.meta.env.BASE_URL}back.jpg`} alt="" />
@@ -783,27 +784,27 @@ export const CalculatorPage = () => {
                             className={cn(
                               'absolute inset-y-8 w-5  border-brand-400/70',
                               handlePosition === 'left'
-                                ? 'left-0 border-l-2 rounded-none'
-                                : 'right-0 border-r-2 rounded-none',
+                                ? 'left-0 border-l-[4px] rounded-none'
+                                : 'right-0 border-r-[4px] rounded-none',
                             )}
                           />
                         ) : null}
 
                         {mode === 'tilt_turn' ? (
-                          <span className="absolute w-full top-8 h-1 rounded-t-[2px] border-x-2 border-t-2 border-brand-400/70" />
+                          <span className="absolute w-full top-8 h-1 rounded-t-[2px] border-x-3 border-t-[4px] border-brand-400/70" />
                         ) : null}
 
                         {mode === 'fanlight' ? (
-                          <span className="absolute w-full top-8 h-1 rounded-t-[2px] border-x-2 border-t-2 border-brand-400/70" />
+                          <span className="absolute w-full top-8 h-1 rounded-t-[2px] border-x-3 border-t-[4px] border-brand-400/70" />
                         ) : null}
 
                         {handlePosition !== 'none' ? (
                           <span
                             className={cn(
                               'absolute rounded-full bg-brand-400',
-                              handlePosition === 'left' ? 'left-0 top-1/2 h-8 w-[6px] -translate-y-1/2' : null,
-                              handlePosition === 'right' ? 'right-0 mr-[-2px] top-1/2 h-8 w-[6px] -translate-y-1/2' : null,
-                              handlePosition === 'top' ? 'left-1/2 top-8 mt-[-1px] h-[4px] w-8 -translate-x-1/2' : null,
+                              handlePosition === 'left' ? 'left-0 top-1/2 h-8 w-[8px] -translate-y-1/2' : null,
+                              handlePosition === 'right' ? 'right-0 mr-[-2px] top-1/2 h-8 w-[8px] -translate-y-1/2' : null,
+                              handlePosition === 'top' ? 'left-1/2 top-8 mt-[-1px] h-[8px] w-8 -translate-x-1/2' : null,
                             )}
                           />
                         ) : null}
