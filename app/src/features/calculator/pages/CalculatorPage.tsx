@@ -490,8 +490,8 @@ export const CalculatorPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-page px-2 py-3 rounded-xl">
-      <main className="mx-auto w-full max-w-[576px] bg-surface shadow-panel">
+    <div className="min-h-screen bg-page px-2 py-3">
+      <main className="mx-auto w-full max-w-[576px] bg-surface shadow-panel rounded-xl">
         <header className="border-b border-slate-200 px-4 pb-4 pt-5">
           <div className="flex items-center justify-between gap-3">
             <button
@@ -525,7 +525,7 @@ export const CalculatorPage = () => {
               </div>
 
             </div>
-              <p className="text-[30px] mt-2 text-right font-extrabold leading-none text-ink-800">
+              <p className="text-[30px] mt-2 font-extrabold leading-none text-ink-800">
                 {formatCurrency(totalPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
           </article>
@@ -556,11 +556,11 @@ export const CalculatorPage = () => {
                 <button
                   type="button"
                   onClick={() => setDraft((value) => ({ ...value, width: clampDimension(value.width - 50) }))}
-                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
+                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600 rounded-lg"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
-                <label className="flex h-12 flex-1 items-center justify-center gap-2 border border-brand-400 bg-slate-50 px-3">
+                <label className="flex h-12 flex-1 items-center justify-center gap-2 border border-brand-400 bg-slate-50 px-3 rounded-lg">
                   <input
                     value={draft.width}
                     inputMode="numeric"
@@ -577,7 +577,7 @@ export const CalculatorPage = () => {
                 <button
                   type="button"
                   onClick={() => setDraft((value) => ({ ...value, width: clampDimension(value.width + 50) }))}
-                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
+                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600 rounded-lg"
                 >
                   <Plus className="h-4 w-4" />
                 </button>
@@ -587,11 +587,11 @@ export const CalculatorPage = () => {
                 <button
                   type="button"
                   onClick={() => setDraft((value) => ({ ...value, height: clampDimension(value.height - 50) }))}
-                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
+                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600 rounded-lg"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
-                <label className="flex h-12 flex-1 items-center justify-center gap-2 border border-slate-300 bg-slate-50 px-3">
+                <label className="flex h-12 flex-1 items-center justify-center gap-2 border border-slate-300 bg-slate-50 px-3 rounded-lg">
                   <input
                     value={draft.height}
                     inputMode="numeric"
@@ -608,7 +608,7 @@ export const CalculatorPage = () => {
                 <button
                   type="button"
                   onClick={() => setDraft((value) => ({ ...value, height: clampDimension(value.height + 50) }))}
-                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600"
+                  className="inline-flex h-12 w-12 items-center justify-center border border-slate-300 bg-slate-50 text-slate-600 rounded-lg"
                 >
                   <Plus className="h-4 w-4" />
                 </button>
@@ -715,12 +715,16 @@ export const CalculatorPage = () => {
             <div className="relative rounded-xl border border-slate-200 p-3">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <p className="flex justify-between items-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <div className='flex justify-between items-center'>
+                        <p className=" text-xs font-semibold uppercase tracking-wide  text-ink-800">
                     Визуализация
-                      <span className="inline-flex items-center border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500">
+
+                    </p>
+                      <span className="inline-flex rounded-md items-center border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500">
                         {currentOpening.label}
                       </span>
-                    </p>
+                  </div>
+
                   <p className="text-sm text-slate-500">Нажмите на нужную створку прямо на схеме</p>
                 </div>
 
@@ -942,7 +946,7 @@ export const CalculatorPage = () => {
                 {formatCurrency(totalPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <span className="inline-flex items-center gap-1 border border-slate-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-600">
+            <span className="inline-flex items-center gap-1 border border-slate-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-600 rounded-md">
               {currentOpening.label}
             </span>
           </div>

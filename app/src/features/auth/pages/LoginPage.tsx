@@ -72,7 +72,7 @@ export const LoginPage = () => {
         </header>
         <section className="px-6 pb-7">
           <div className="mb-6 flex flex-col items-center text-center">
-            <div className="mb-5 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-brand-50 text-brand-500">
+            <div className="mb-5 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
               <Grid2X2 className="h-9 w-9"/>
             </div>
             <h2 className="text-4xl font-extrabold tracking-tight text-ink-800">С возвращением</h2>
