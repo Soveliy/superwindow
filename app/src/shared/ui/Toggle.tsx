@@ -10,14 +10,14 @@ export const Toggle = ({ checked, className }: ToggleProps) => {
     <span
       aria-hidden="true"
       className={cn(
-        'relative inline-flex h-6 w-11 shrink-0 items-center border border-slate-300',
+        'relative inline-flex h-6 w-11 shrink-0 items-center border border-slate-300 rounded-xl',
         checked ? 'bg-white' : 'bg-slate-200',
         className,
       )}
     >
       <span
         className={cn(
-          'inline-block h-5 w-5 bg-surface transition-transform',
+          'inline-block h-5 w-5 bg-surface transition-transform rounded-full',
           checked ? 'translate-x-5 border border-brand-500' : 'translate-x-1 border border-slate-400',
         )}
       />

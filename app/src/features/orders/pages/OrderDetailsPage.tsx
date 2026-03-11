@@ -362,8 +362,8 @@ export const OrderDetailsPage = () => {
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
-      <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel">
-        <header className="grid grid-cols-[64px_1fr_80px] items-center border-b border-slate-200 px-4 py-4">
+      <main className="mx-auto w-full max-w-[576px] rounded-xl bg-surface shadow-panel">
+        <header className="grid grid-cols-[64px_1fr_80px] items-center border-b border-slate-200 px-4 py-4 rounded-0">
           <button
             type="button"
             className="justify-self-start text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700"
@@ -393,7 +393,7 @@ export const OrderDetailsPage = () => {
               >
                 <div className="flex items-center gap-3">
                   <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-100 text-brand-500">
-                    <UserRound className="h-6 w-6" />
+                    <UserRound className="h-6 w-6 text-ink-800" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="mb-1 flex items-center justify-between gap-2">
@@ -418,7 +418,7 @@ export const OrderDetailsPage = () => {
               <>
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h2 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-ink-800">
-                    <UserRound className="h-5 w-5 text-brand-500" />
+                    <UserRound className="h-5 w-5 text-ink-800" />
                     Клиент
                   </h2>
                   <button
@@ -499,7 +499,7 @@ export const OrderDetailsPage = () => {
           <section>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-ink-800">
-                <ShoppingCart className="h-5 w-5 text-brand-500" />
+                <ShoppingCart className="h-5 w-5 text-ink-800" />
                 Позиции заказа
               </h2>
               <span className="rounded-full bg-brand-50 px-2 py-1 text-[11px] font-bold text-brand-600">
@@ -581,12 +581,13 @@ export const OrderDetailsPage = () => {
             </div>
           </section>
           <section className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-3">
               <div>
-                <h2 className="text-2xl font-extrabold tracking-tight text-ink-800">Услуги</h2>
-                <p className="text-sm text-slate-500">Монтаж по ГОСТу и доставка</p>
-              </div>
-              <button
+                <div className='flex justify-between items-center mb-3'>
+                    <h2 className="text-2xl font-extrabold tracking-tight text-ink-800">
+                  Услуги
+                  </h2>
+                  <button
                 type="button"
                 onClick={openAddServiceDialog}
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 text-sm font-semibold text-brand-600 hover:bg-brand-100"
@@ -594,6 +595,10 @@ export const OrderDetailsPage = () => {
                 <Plus className="h-4 w-4" />
                 Добавить услуги
               </button>
+                </div>
+                <p className="text-sm text-slate-500">Монтаж по ГОСТу и доставка</p>
+              </div>
+
             </div>
 
             {services.length > 0 ? (
@@ -621,7 +626,7 @@ export const OrderDetailsPage = () => {
                           isInstallation ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-500'
                         }`}
                       >
-                        <Icon className="h-5 w-5" color='#000'/>
+                        <Icon className="h-5 w-5" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-ink-800">{title}</p>
@@ -663,12 +668,12 @@ export const OrderDetailsPage = () => {
               </div>
             </div>
 
-            <div className="mt-4 flex items-end justify-between gap-4 border-t border-slate-200 pt-4">
+            <div className="mt-4 flex flex-col gap-4 border-t border-slate-200 pt-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Заказ</p>
                 <p className="text-2xl font-extrabold tracking-tight text-ink-800">{resolvedOrderId}</p>
               </div>
-              <div className="text-right">
+              <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Итого</p>
                 <p className="text-[36px] font-extrabold leading-none tracking-tight text-ink-800">
                   {formatCurrency(orderTotalAmount, {

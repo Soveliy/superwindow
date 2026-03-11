@@ -19,10 +19,10 @@ export const Button = ({
 }: ButtonProps) => {
   const variantClassName =
     variant === 'primary'
-      ? 'border border-slate-200 bg-white text-slate-50'
+      ? 'border border-slate-200 bg-white text-brand-500'
       : variant === 'secondary'
-        ? 'border border-slate-200 bg-white text-slate-50'
-        : 'border border-slate-200 bg-white text-slate-50';
+        ? 'border border-slate-200 bg-white text-brand-500'
+        : 'border border-slate-200 bg-white text-brand-500';
 
   return (
     <button

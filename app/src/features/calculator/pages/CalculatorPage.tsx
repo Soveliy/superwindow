@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ButtonHTMLAttributes } from 'react';
-import { ArrowLeft, Check, ChevronRight, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Crown, Minus, Pencil, Plus, ShieldCheck, Trash2, Wallet, X, type LucideIcon } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   type AdditionalOptionType,
@@ -51,6 +51,8 @@ interface OptionFormState {
   dripMaterial: DripMaterial;
 }
 
+const withBase = (path: string): string => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+
 const profileCatalog = [
   { id: 'rula-58', label: 'Rula 58мм', description: 'Базовый профиль', pricePerSquare: 3200 },
   { id: 'isotech-58', label: 'Isotech 58мм', description: 'Надежный вариант', pricePerSquare: 3500 },
@@ -67,11 +69,24 @@ const openingTypes: Array<{ id: OpeningType; label: string; factor: number }> = 
   { id: 'balcony', label: 'Балкон', factor: 2.12 },
 ];
 
+const openingTypeImages: Record<OpeningType, string> = {
+  single: withBase('/windows/1.png'),
+  double: withBase('/windows/2.png'),
+  triple: withBase('/windows/3.png'),
+  balcony: withBase('/windows/4.png'),
+};
+
 const packageOptions: Array<{ id: PackageType; label: string; factor: number }> = [
   { id: 'budget', label: 'Бюджет', factor: 1 },
   { id: 'standard', label: 'Стандарт', factor: 1.12 },
   { id: 'premium', label: 'Премиум', factor: 1.26 },
 ];
+
+const packageIcons: Record<PackageType, LucideIcon> = {
+  budget: Wallet,
+  standard: ShieldCheck,
+  premium: Crown,
+};
 
 const openingModes: Array<{ id: OpeningMode; label: string; price: number }> = [
   { id: 'fixed', label: 'Глухое', price: 0 },
@@ -127,6 +142,11 @@ const dripMaterialOptions: Array<{ id: DripMaterial; label: string; extra: numbe
 
 const defaultDrainage: DrainageType = 'bottom';
 const defaultSealColor: SealColor = 'black';
+const mosquitoPatternStyle = {
+  backgroundImage:
+    'linear-gradient(rgba(148, 163, 184, 0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.22) 1px, transparent 1px)',
+  backgroundSize: '8px 8px',
+} as const;
 
 const clampDimension = (value: number): number => Math.max(500, Math.min(3200, value));
 const clampOptionLength = (value: number): number => Math.max(300, Math.min(6000, value));
@@ -157,6 +177,11 @@ const getHandleOptions = (mode: OpeningMode): HandlePosition[] => {
   }
   return ['left', 'right'];
 };
+
+const getOpeningModeLabel = (mode: OpeningMode | undefined): string =>
+  openingModes.find((item) => item.id === mode)?.label ?? '—';
+
+const getGridColumnsClass = (count: number): string => (count === 1 ? 'grid-cols-1' : count === 2 ? 'grid-cols-2' : 'grid-cols-3');
 
 const createDefaultSash = (id: SashId, openingType: OpeningType): CalculatorSashConfig => {
   const mode =
@@ -328,6 +353,7 @@ export const CalculatorPage = () => {
   const currentProfile = profileCatalog.find((item) => item.id === draft.profileId) ?? profileCatalog[2];
   const currentPackage = packageOptions.find((item) => item.id === draft.packageType) ?? packageOptions[1];
   const currentOpening = openingTypes.find((item) => item.id === draft.openingType) ?? openingTypes[1];
+  const previewSashIds = openingSashMap[draft.openingType];
   const sashIds = openingSashMap[draft.openingType];
   const activeSash = draft.sashes.find((sash) => sash.id === activeSashId) ?? draft.sashes[0];
 
@@ -471,7 +497,7 @@ export const CalculatorPage = () => {
             <button
               type="button"
               onClick={() => navigate(returnTo)}
-              className="inline-flex h-9 w-9 items-center justify-center border border-slate-300 bg-slate-100 text-ink-700 transition-colors hover:bg-slate-200"
+              className="justify-self-start text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700 rounded-0"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -497,17 +523,29 @@ export const CalculatorPage = () => {
                   {currentOpening.label} · {currentProfile.label} · {currentPackage.label}
                 </p>
               </div>
-              <p className="text-[30px] font-extrabold leading-none text-ink-800">
+
+            </div>
+              <p className="text-[30px] mt-2 text-right font-extrabold leading-none text-ink-800">
                 {formatCurrency(totalPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
-            </div>
           </article>
 
           <section className="space-y-4">
+            <h2 className="text-2xl font-bold">
+              Тип конструкции
+            </h2>
             <div className="grid grid-cols-2 gap-3">
               {openingTypes.map((item) => (
-                <ChoiceButton key={item.id} type="button" active={draft.openingType === item.id} onClick={() => setOpeningType(item.id)}>
-                  <span className="mb-3 block h-14 border border-slate-300 bg-slate-100" />
+                <ChoiceButton
+                  key={item.id}
+                  type="button"
+                  active={draft.openingType === item.id}
+                  onClick={() => setOpeningType(item.id)}
+                  className="flex-col items-stretch justify-start"
+                >
+                  <span className="mb-3 flex h-14 items-center justify-center overflow-hidden rounded-lg px-2 py-1">
+                    <img src={openingTypeImages[item.id]} alt={item.label} className="h-full w-full object-contain" />
+                  </span>
                   <span className="text-sm font-bold text-ink-700">{item.label}</span>
                 </ChoiceButton>
               ))}
@@ -615,17 +653,27 @@ export const CalculatorPage = () => {
           </section>
 
           <section className="space-y-4">
-            <div className="grid grid-cols-3 gap-2">
+              <h2 className="text-2xl font-bold">
+                Профильная система
+              </h2>
+            <div className="grid grid-cols-1 gap-2">
               {packageOptions.map((item) => (
-                <ChoiceButton
-                  key={item.id}
-                  type="button"
-                  active={draft.packageType === item.id}
-                  onClick={() => setDraft((value) => ({ ...value, packageType: item.id }))}
-                  className="h-11 text-center text-sm font-semibold"
-                >
-                  {item.label}
-                </ChoiceButton>
+                (() => {
+                  const Icon = packageIcons[item.id];
+
+                  return (
+                    <ChoiceButton
+                      key={item.id}
+                      type="button"
+                      active={draft.packageType === item.id}
+                      onClick={() => setDraft((value) => ({ ...value, packageType: item.id }))}
+                      className="h-14 flex gap-2 text-sm font-semibold"
+                    >
+                      <Icon className="h-5 w-5" />
+                      {item.label}
+                    </ChoiceButton>
+                  );
+                })()
               ))}
             </div>
 
@@ -659,31 +707,113 @@ export const CalculatorPage = () => {
               ))}
             </div>
           </section>
+              <h2 className="text-2xl font-bold">
+              Конфигурация створок
+            </h2>
+          <section className="space-y-4  bg-slate-50 px-3 py-3">
 
-          <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-            <div className={cn('grid gap-2', sashIds.length === 1 ? 'grid-cols-1' : sashIds.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
-              {sashIds.map((sashId) => {
-                const sash = draft.sashes.find((item) => item.id === sashId);
+            <div className="relative rounded-xl border border-slate-200 p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="flex justify-between items-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Визуализация
+                      <span className="inline-flex items-center border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500">
+                        {currentOpening.label}
+                      </span>
+                    </p>
+                  <p className="text-sm text-slate-500">Нажмите на нужную створку прямо на схеме</p>
+                </div>
 
-                return (
-                  <button
-                    key={sashId}
-                    type="button"
-                    onClick={() => setActiveSashId(sashId)}
-                    className={cn(
-                      'rounded-xl border px-3 py-3 text-left transition-colors',
-                      activeSashId === sashId
-                        ? 'border-brand-500 bg-brand-50 text-brand-700'
-                        : 'border-slate-200 bg-white hover:border-slate-300',
-                    )}
-                  >
-                    <p className="text-sm font-extrabold">{sashLabels[sashId]}</p>
-                    <p className="mt-1 text-xs text-slate-500">{sash?.mode ? openingModes.find((item) => item.id === sash.mode)?.label : '—'}</p>
-                    <p className="mt-2 text-xs text-slate-500">{sash?.handlePosition ? handleLabels[sash.handlePosition] : '—'}</p>
-                  </button>
-                );
-              })}
+              </div>
+
+              <div>
+                <div className={cn('flex h-64 overflow-x-auto gap-1', getGridColumnsClass(previewSashIds.length))}>
+                  {previewSashIds.map((sashId) => {
+                    const sash = draft.sashes.find((item) => item.id === sashId);
+                    const mode = sash?.mode ?? 'fixed';
+                    const handlePosition = sash?.handlePosition ?? getDefaultHandlePosition(mode, sashId);
+                    const isActive = activeSashId === sashId;
+                    const mosquitoEnabled = sash?.mosquitoScreenEnabled ?? false;
+                    const isTwoItems = previewSashIds.length === 2;
+
+                    return (
+                      <button
+                        key={`preview-${sashId}`}
+                        type="button"
+                        onClick={() => setActiveSashId(sashId)}
+                        className={cn(
+                          'relative rounded-0 text-left transition-all',
+                          //  index !== 0 && 'ml-[-2px]'
+                          isTwoItems ? 'w-[calc(50%-2px)]' : 'min-w-36',
+                          isActive
+                            ? 'z-40'
+                            : 'opacity-20',
+                        )}
+                      >
+
+
+                        <span className="absolute left-0 w-full top-2 flex items-center justify-between gap-2">
+                          <span className={cn('text-[10px] font-semibold uppercase tracking-[0.18em]', isActive ? 'text-brand-600' : 'text-slate-500')}>
+                            {sashLabels[sashId]}
+                          </span>
+                          {mosquitoEnabled ? (
+                            <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
+                              Сетка
+                            </span>
+                          ) : null}
+                        </span>
+
+                        <span className="absolute inset-y-8 rounded-sm overflow-hidden border-2 border-white">
+                          <img className="h-full w-full object-cover rounded-none opacity-50" src="/back.jpg" alt="" />
+                            {mode === 'fixed' ? <span className="absolute h-full top-0 left-0 w-full rounded-[2px] bg-slate-100/80" /> : null}
+                              {mosquitoEnabled ? <span className="absolute h-full w-full top-0 left-0 z-10 opacity-40" style={mosquitoPatternStyle} /> : null}
+                        </span>
+
+
+
+
+                        {(mode === 'turn' || mode === 'tilt_turn') ? (
+                          <span
+                            className={cn(
+                              'absolute inset-y-8 w-5  border-brand-400/70',
+                              handlePosition === 'left'
+                                ? 'left-0 border-l-2 rounded-none'
+                                : 'right-0 border-r-2 rounded-none',
+                            )}
+                          />
+                        ) : null}
+
+                        {mode === 'tilt_turn' ? (
+                          <span className="absolute w-full top-8 h-1 rounded-t-[2px] border-x-2 border-t-2 border-brand-400/70" />
+                        ) : null}
+
+                        {mode === 'fanlight' ? (
+                          <span className="absolute w-full top-8 h-1 rounded-t-[2px] border-x-2 border-t-2 border-brand-400/70" />
+                        ) : null}
+
+                        {handlePosition !== 'none' ? (
+                          <span
+                            className={cn(
+                              'absolute rounded-full bg-brand-500',
+                              handlePosition === 'left' ? 'left-0 top-1/2 h-8 w-[6px] -translate-y-1/2' : null,
+                              handlePosition === 'right' ? 'right-0 mr-[-2px] top-1/2 h-8 w-[6px] -translate-y-1/2' : null,
+                              handlePosition === 'top' ? 'left-1/2 top-8 mt-[-1px] h-[4px] w-8 -translate-x-1/2' : null,
+                            )}
+                          />
+                        ) : null}
+
+                        <span className="absolute l-0 bottom-2 rounded-lg  text-[11px] font-semibold text-slate-600 backdrop-blur-sm">
+                          {getOpeningModeLabel(sash?.mode)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+              </div>
             </div>
+
+
 
             <div className="grid grid-cols-2 gap-2">
               {openingModes.map((item) => (
@@ -748,15 +878,16 @@ export const CalculatorPage = () => {
                 <h2 className="text-xl font-extrabold text-ink-800">Дополнительные опции</h2>
                 <p className="text-sm text-slate-500">Мини-корзина подоконников и отливов</p>
               </div>
+
+            </div>
               <button
                 type="button"
                 onClick={openAddOptionDialog}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 text-sm font-semibold text-brand-600 hover:bg-brand-100"
+                className="mb-4 inline-flex h-10 items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 text-sm font-semibold text-brand-600 hover:bg-brand-100"
               >
                 <Plus className="h-4 w-4" />
                 Добавить опцию
               </button>
-            </div>
 
             {draft.additionalOptions.length > 0 ? (
               <div className="space-y-3">
@@ -803,7 +934,7 @@ export const CalculatorPage = () => {
           </section>
         </section>
 
-        <footer className="fixed bottom-0 left-1/2 z-10 w-[calc(100%-1rem)] max-w-[560px] -translate-x-1/2 border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-panel backdrop-blur-sm">
+        <footer className="fixed z-50 bottom-0 left-1/2 z-10 w-[calc(100%-1rem)] max-w-[560px] -translate-x-1/2 border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-panel backdrop-blur-sm">
           <div className="mb-3 flex items-end justify-between gap-2">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Стоимость</p>
@@ -823,8 +954,8 @@ export const CalculatorPage = () => {
       </main>
 
       {isOptionDialogOpen ? (
-        <div className="fixed inset-0 z-20 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">
-          <div className="w-full max-w-[540px] rounded-xl bg-surface p-4 shadow-panel">
+        <div className="fixed z-50 inset-0 z-20 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">
+          <div className="w-full z-100 max-w-[540px] rounded-xl bg-surface p-4 shadow-panel">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-extrabold text-ink-800">

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -17,7 +17,7 @@
     --color-brand-200: 58 58 58;
     --color-brand-300: 74 74 74;
     --color-brand-400: 143 143 143;
-    --color-brand-500: 192 192 192;
+    --color-brand-500: 23 23 23;
     --color-brand-600: 215 215 215;
     --color-brand-700: 255 255 255;
 
@@ -42,7 +42,7 @@
     --shadow-panel: 0 20px 45px -30px rgba(0, 0, 0, 0.75);
   }
 
-  :root[data-theme='light'] {
+  :root[data-theme="light"] {
     color-scheme: light;
     --color-page: 243 244 246;
     --color-surface: 255 255 255;
@@ -76,16 +76,6 @@
     --color-slate-900: 15 23 42;
 
     --shadow-panel: 0 20px 45px -30px rgba(15, 23, 42, 0.28);
-  }
-
-  * {
-    @apply border-slate-200;
-  }
-
-  *,
-  *::before,
-  *::after {
-    border-radius: var(--radius-base);
   }
 
   html,
