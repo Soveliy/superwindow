@@ -512,7 +512,7 @@ export const OrderDetailsPage = () => {
                 {positionCards.map((position) => (
                   <article key={position.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
                     <div className="mb-3 flex items-start gap-3">
-                      <div className="inline-flex h-20 w-20 items-center justify-center rounded-xl border border-slate-300 bg-slate-100">
+                      <div className="inline-flex shrink-0 h-20 w-20 items-center justify-center rounded-xl border border-slate-300 bg-slate-100">
                         <div className="h-10 w-10 border border-slate-400">
                           <div className="h-full w-1/2 border-r border-slate-400" />
                         </div>
@@ -545,7 +545,7 @@ export const OrderDetailsPage = () => {
                         <button
                           type="button"
                           onClick={() => openCalculatorForPosition(position.id)}
-                          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-brand-500 hover:bg-slate-200"
+                          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200"
                           aria-label="Редактировать позицию"
                         >
                           <Pencil className="h-4 w-4" />
@@ -553,7 +553,7 @@ export const OrderDetailsPage = () => {
                         <button
                           type="button"
                           onClick={() => removePosition(position.id)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-400 hover:bg-slate-200"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200"
                           aria-label="Удалить позицию"
                         >
                           <Trash2 className="h-4 w-4" />

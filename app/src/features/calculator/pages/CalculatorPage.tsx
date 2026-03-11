@@ -315,8 +315,8 @@ const ChoiceButton = ({
     disabled={disabled}
     {...props}
     className={cn(
-      'flex items-center justify-center gap-1 border px-3 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:hover:border-slate-200',
-      active ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 bg-slate-50 hover:border-slate-300',
+      'flex rounded-lg items-center justify-center gap-1 border px-3 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:hover:border-slate-200',
+      active ? 'border-brand-800 bg-brand-50 text-brand-700' : 'border-slate-200 bg-slate-50 hover:border-slate-300',
       disabled ? 'opacity-60' : null,
       className,
     )}
@@ -490,7 +490,7 @@ export const CalculatorPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-page px-2 py-3">
+    <div className="min-h-screen bg-page px-2 py-3 rounded-xl">
       <main className="mx-auto w-full max-w-[576px] bg-surface shadow-panel">
         <header className="border-b border-slate-200 px-4 pb-4 pt-5">
           <div className="flex items-center justify-between gap-3">
@@ -512,7 +512,7 @@ export const CalculatorPage = () => {
         </header>
 
         <section className="space-y-5 px-4 pb-36 pt-4">
-          <article className="border border-slate-200 bg-slate-50 px-4 py-4">
+          <article className="border border-slate-200 bg-slate-50 px-4 py-4 rounded-xl">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Текущая конфигурация</p>
             <div className="mt-2 flex items-end justify-between gap-3">
               <div>
@@ -710,7 +710,7 @@ export const CalculatorPage = () => {
               <h2 className="text-2xl font-bold">
               Конфигурация створок
             </h2>
-          <section className="space-y-4  bg-slate-50 px-3 py-3">
+          <section className="space-y-4  bg-slate-50">
 
             <div className="relative rounded-xl border border-slate-200 p-3">
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -794,7 +794,7 @@ export const CalculatorPage = () => {
                         {handlePosition !== 'none' ? (
                           <span
                             className={cn(
-                              'absolute rounded-full bg-brand-500',
+                              'absolute rounded-full bg-brand-400',
                               handlePosition === 'left' ? 'left-0 top-1/2 h-8 w-[6px] -translate-y-1/2' : null,
                               handlePosition === 'right' ? 'right-0 mr-[-2px] top-1/2 h-8 w-[6px] -translate-y-1/2' : null,
                               handlePosition === 'top' ? 'left-1/2 top-8 mt-[-1px] h-[4px] w-8 -translate-x-1/2' : null,

@@ -104,7 +104,7 @@ export const OrdersPage = () => {
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
-      <main className="mx-auto w-full max-w-[576px] rounded-[34px] bg-surface shadow-panel">
+      <main className="mx-auto w-full max-w-[576px] rounded-xl bg-surface shadow-panel">
         <section className="relative min-h-[calc(100vh-1.5rem)] flex-1 px-4 pb-36 pt-5">
           <header className="mb-4 flex items-center justify-between">
             <h1 className="text-[42px] font-extrabold leading-none tracking-tight text-ink-800">Заказы</h1>
@@ -156,7 +156,7 @@ export const OrdersPage = () => {
                   className={cn(
                     'rounded-full whitespace-nowrap border px-5 py-2 text-sm font-semibold transition-colors',
                     isActive
-                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      ? 'border-brand-700 bg-brand-50 text-ink-700'
                       : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100',
                   )}
                 >
