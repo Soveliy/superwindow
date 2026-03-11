@@ -1,7 +1,24 @@
-import { ArrowLeft, Bell, Building2, ChevronRight, LockKeyhole, LogOut, Moon, Sun, UserRound } from 'lucide-react';
+import { useState } from 'react';
+import {
+  ArrowLeft,
+  Bell,
+  Building2,
+  CalendarPlus2,
+  ChevronRight,
+  LockKeyhole,
+  LogOut,
+  Moon,
+  Sun,
+  Trash2,
+  UserRound,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
 import { authStorage } from '@/features/auth/model/auth-storage';
+import {
+  readAvailableProductionDates,
+  writeAvailableProductionDates,
+} from '@/features/settings/model/production-dates.storage';
 import { type AppTheme, useTheme } from '@/shared/theme/ThemeProvider';
 import { Button } from '@/shared/ui/Button';
 
@@ -28,10 +45,45 @@ const themeOptions: Array<{ id: AppTheme; label: string; icon: typeof Sun }> = [
 export const SettingsPage = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const [productionDates, setProductionDates] = useState<string[]>(() => readAvailableProductionDates());
+  const [productionDateInput, setProductionDateInput] = useState('');
 
   const handleLogout = (): void => {
     authStorage.clearSession();
     navigate('/login', { replace: true });
+  };
+
+  const syncProductionDates = (nextDates: string[]): void => {
+    const normalizedDates = [...new Set(nextDates.filter(Boolean))].sort((first, second) => first.localeCompare(second));
+    setProductionDates(normalizedDates);
+    writeAvailableProductionDates(normalizedDates);
+  };
+
+  const addProductionDate = (): void => {
+    if (!productionDateInput) {
+      return;
+    }
+
+    syncProductionDates([...productionDates, productionDateInput]);
+    setProductionDateInput('');
+  };
+
+  const removeProductionDate = (date: string): void => {
+    syncProductionDates(productionDates.filter((item) => item !== date));
+  };
+
+  const formatProductionDate = (value: string): string => {
+    const parsedDate = new Date(`${value}T00:00:00`);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return value;
+    }
+
+    return new Intl.DateTimeFormat('ru-RU', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    }).format(parsedDate);
   };
 
   return (
@@ -108,6 +160,59 @@ export const SettingsPage = () => {
                 );
               })}
             </div>
+          </article>
+
+          <article className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <h2 className="mb-1 text-xl font-extrabold tracking-tight text-ink-800">Даты изготовления</h2>
+            <p className="text-xs text-slate-500">Эти даты будут доступны менеджеру при выборе даты изготовления заказа.</p>
+
+            <div className="mt-4 flex gap-2">
+              <label className="flex-1 rounded-xl border border-slate-300 bg-slate-100 px-3">
+                <span className="sr-only">Дата изготовления</span>
+                <input
+                  type="date"
+                  value={productionDateInput}
+                  onChange={(event) => setProductionDateInput(event.target.value)}
+                  className="h-12 w-full border-none bg-transparent text-sm font-semibold text-ink-800 outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={addProductionDate}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 text-sm font-semibold text-brand-600 hover:bg-brand-100"
+              >
+                <CalendarPlus2 className="h-4 w-4" />
+                Добавить
+              </button>
+            </div>
+
+            {productionDates.length > 0 ? (
+              <div className="mt-4 space-y-2">
+                {productionDates.map((date) => (
+                  <div
+                    key={date}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3"
+                  >
+                    <div>
+                      <p className="font-semibold text-ink-800">{formatProductionDate(date)}</p>
+                      <p className="text-xs text-slate-500">{date}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeProductionDate(date)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      aria-label="Удалить дату изготовления"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500">
+                Пока не добавлено ни одной доступной даты изготовления.
+              </div>
+            )}
           </article>
 
           <section>

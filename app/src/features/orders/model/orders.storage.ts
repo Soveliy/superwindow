@@ -18,6 +18,17 @@ export interface OrderCustomerForm {
   phone: string;
   address: string;
   contractNumber: string;
+  measurementDate: string;
+  productionDate: string;
+  installationDate: string;
+  comment: string;
+}
+
+interface LegacyOrderCustomerForm {
+  fullName: string;
+  phone: string;
+  address: string;
+  contractNumber: string;
   readinessDate: string;
   installationDate: string;
   comment: string;
@@ -60,7 +71,12 @@ const isOrderService = (value: unknown): value is OrderService => {
   }
 
   if (service.type === 'delivery') {
-    return isDeliveryMode(service.mode) && typeof service.price === 'number' && Number.isFinite(service.price) && service.price >= 0;
+    return (
+      isDeliveryMode(service.mode) &&
+      typeof service.price === 'number' &&
+      Number.isFinite(service.price) &&
+      service.price >= 0
+    );
   }
 
   return false;
@@ -69,15 +85,92 @@ const isOrderService = (value: unknown): value is OrderService => {
 const isValidDraftServices = (value: unknown): value is OrderService[] | undefined =>
   typeof value === 'undefined' || (Array.isArray(value) && value.every(isOrderService));
 
-const cloneForm = (form: OrderCustomerForm): OrderCustomerForm => ({
-  fullName: form.fullName,
-  phone: form.phone,
-  address: form.address,
-  contractNumber: form.contractNumber,
-  readinessDate: form.readinessDate,
-  installationDate: form.installationDate,
-  comment: form.comment,
+const createEmptyOrderCustomerForm = (): OrderCustomerForm => ({
+  fullName: '',
+  phone: '',
+  address: '',
+  contractNumber: '',
+  measurementDate: '',
+  productionDate: '',
+  installationDate: '',
+  comment: '',
 });
+
+const createOrderCustomerFormFromOrder = (order?: OrderSummary): OrderCustomerForm => ({
+  fullName: order?.customer ?? '',
+  phone: '',
+  address: '',
+  contractNumber: order?.code ?? '',
+  measurementDate: '',
+  productionDate: '',
+  installationDate: '',
+  comment: '',
+});
+
+const isOrderCustomerForm = (value: unknown): value is OrderCustomerForm => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const form = value as Partial<OrderCustomerForm>;
+
+  return (
+    isValidString(form.fullName) &&
+    isValidString(form.phone) &&
+    isValidString(form.address) &&
+    isValidString(form.contractNumber) &&
+    isValidString(form.measurementDate) &&
+    isValidString(form.productionDate) &&
+    isValidString(form.installationDate) &&
+    isValidString(form.comment)
+  );
+};
+
+const isLegacyOrderCustomerForm = (value: unknown): value is LegacyOrderCustomerForm => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const form = value as Partial<LegacyOrderCustomerForm>;
+
+  return (
+    isValidString(form.fullName) &&
+    isValidString(form.phone) &&
+    isValidString(form.address) &&
+    isValidString(form.contractNumber) &&
+    isValidString(form.readinessDate) &&
+    isValidString(form.installationDate) &&
+    isValidString(form.comment)
+  );
+};
+
+const normalizeOrderCustomerForm = (value: OrderCustomerForm | LegacyOrderCustomerForm): OrderCustomerForm => {
+  if (isOrderCustomerForm(value)) {
+    return {
+      fullName: value.fullName,
+      phone: value.phone,
+      address: value.address,
+      contractNumber: value.contractNumber,
+      measurementDate: value.measurementDate,
+      productionDate: value.productionDate,
+      installationDate: value.installationDate,
+      comment: value.comment,
+    };
+  }
+
+  return {
+    fullName: value.fullName,
+    phone: value.phone,
+    address: value.address,
+    contractNumber: value.contractNumber,
+    measurementDate: '',
+    productionDate: value.readinessDate,
+    installationDate: value.installationDate,
+    comment: value.comment,
+  };
+};
+
+const cloneForm = (form: OrderCustomerForm | LegacyOrderCustomerForm): OrderCustomerForm => normalizeOrderCustomerForm(form);
 
 const normalizeDraftPositions = (positions: CalculatorPosition[] | undefined): CalculatorPosition[] => {
   if (!Array.isArray(positions)) {
@@ -112,44 +205,19 @@ const cloneServices = (services: OrderService[] | undefined): OrderService[] => 
 
 const isStorageAvailable = (): boolean => typeof window !== 'undefined' && Boolean(window.localStorage);
 
-const createEmptyOrderCustomerForm = (): OrderCustomerForm => ({
-  fullName: '',
-  phone: '',
-  address: '',
-  contractNumber: '',
-  readinessDate: '',
-  installationDate: '',
-  comment: '',
-});
-
-const isOrderCustomerForm = (value: unknown): value is OrderCustomerForm => {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const form = value as Partial<OrderCustomerForm>;
-
-  return (
-    isValidString(form.fullName) &&
-    isValidString(form.phone) &&
-    isValidString(form.address) &&
-    isValidString(form.contractNumber) &&
-    isValidString(form.readinessDate) &&
-    isValidString(form.installationDate) &&
-    isValidString(form.comment)
-  );
-};
-
 const isStoredOrderDraft = (value: unknown): value is StoredOrderDraft => {
   if (!value || typeof value !== 'object') {
     return false;
   }
 
-  const draft = value as Partial<StoredOrderDraft>;
+  const draft = value as Partial<StoredOrderDraft> & {
+    form?: OrderCustomerForm | LegacyOrderCustomerForm;
+  };
 
   return (
     isValidString(draft.id) &&
-    isOrderCustomerForm(draft.form) &&
+    Boolean(draft.form) &&
+    (isOrderCustomerForm(draft.form) || isLegacyOrderCustomerForm(draft.form)) &&
     isValidDraftAmount(draft.amount) &&
     isValidDraftPositions(draft.positions) &&
     isValidDraftServices(draft.services) &&
@@ -180,6 +248,7 @@ const parseOrderDrafts = (rawValue: string | null): StoredOrderDraft[] => {
 
     return parsed.filter(isStoredOrderDraft).map((draft) => ({
       ...draft,
+      form: cloneForm(draft.form),
       amount: normalizeDraftAmount(draft.amount),
       positions: normalizeDraftPositions(draft.positions),
       services: cloneServices(draft.services),
@@ -234,16 +303,67 @@ const formatDraftDate = (isoDate: string): string => {
   return orderDateFormatter.format(parsedDate);
 };
 
-const resolveDraftLeadTime = (draft: StoredOrderDraft, baseOrder?: OrderSummary): string => {
-  const readinessDate = draft.form.readinessDate.trim();
-  const installationDate = draft.form.installationDate.trim();
+const formatCalendarDate = (isoDate: string): string => {
+  if (!isoDate) {
+    return '';
+  }
 
-  if (readinessDate) {
-    return `до ${readinessDate}`;
+  const parsedDate = new Date(`${isoDate}T00:00:00`);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '';
+  }
+
+  return orderDateFormatter.format(parsedDate);
+};
+
+const addDays = (isoDate: string, days: number): string => {
+  const parsedDate = new Date(`${isoDate}T00:00:00`);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '';
+  }
+
+  parsedDate.setDate(parsedDate.getDate() + days);
+
+  const year = parsedDate.getFullYear();
+  const month = `${parsedDate.getMonth() + 1}`.padStart(2, '0');
+  const day = `${parsedDate.getDate()}`.padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+const formatDateRange = (startDate: string): string => {
+  if (!startDate) {
+    return '';
+  }
+
+  const endDate = addDays(startDate, 5);
+  const formattedStartDate = formatCalendarDate(startDate);
+  const formattedEndDate = formatCalendarDate(endDate);
+
+  if (!formattedStartDate) {
+    return '';
+  }
+
+  return formattedEndDate ? `${formattedStartDate} - ${formattedEndDate}` : formattedStartDate;
+};
+
+const resolveDraftLeadTime = (draft: StoredOrderDraft, baseOrder?: OrderSummary): string => {
+  const productionDate = draft.form.productionDate.trim();
+  const installationDate = draft.form.installationDate.trim();
+  const measurementDate = draft.form.measurementDate.trim();
+
+  if (productionDate) {
+    return formatCalendarDate(productionDate) || baseOrder?.leadTime || 'Дата изготовления уточняется';
   }
 
   if (installationDate) {
-    return `монтаж ${installationDate}`;
+    return `монтаж ${formatDateRange(installationDate)}`;
+  }
+
+  if (measurementDate) {
+    return `замер ${formatDateRange(measurementDate)}`;
   }
 
   return baseOrder?.leadTime ?? 'Срок уточняется';
@@ -274,7 +394,7 @@ const mapDraftToSummary = (draft: StoredOrderDraft): OrderSummary => {
   return {
     id: draft.id,
     date: baseOrder?.date ?? formatDraftDate(draft.updatedAt),
-    customer: customerName || baseOrder?.customer || 'Новый заказ',
+    customer: customerName || baseOrder?.customer || 'Новый расчет',
     status: baseOrder?.status ?? 'new',
     amount: draft.amount ?? baseOrder?.amount ?? null,
     subtitle: baseOrder?.subtitle ?? 'Ожидание расчета',
@@ -310,11 +430,12 @@ const getOrderById = (orderId: string): OrderSummary | undefined => {
 const getOrderForm = (orderId: string): OrderCustomerForm | null => {
   const draft = readOrderDrafts().find((item) => item.id === orderId);
 
-  if (!draft) {
-    return null;
+  if (draft) {
+    return cloneForm(draft.form);
   }
 
-  return cloneForm(draft.form);
+  const baseOrder = ordersMock.find((item) => item.id === orderId);
+  return baseOrder ? createOrderCustomerFormFromOrder(baseOrder) : null;
 };
 
 const getOrderPositions = (orderId: string): CalculatorPosition[] | null => {

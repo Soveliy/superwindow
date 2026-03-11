@@ -7,11 +7,11 @@ export interface OrderStatusUi {
 
 export const orderStatusUi: Record<OrderStatus, OrderStatusUi> = {
   ready: {
-    label: 'Готов',
+    label: 'Монтаж',
     badgeClassName: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   },
   in_progress: {
-    label: 'В работе',
+    label: 'В производстве',
     badgeClassName: 'border-amber-200 bg-amber-50 text-amber-700',
   },
   paid: {
@@ -19,7 +19,7 @@ export const orderStatusUi: Record<OrderStatus, OrderStatusUi> = {
     badgeClassName: 'border-sky-200 bg-sky-50 text-sky-700',
   },
   new: {
-    label: 'Новый',
+    label: 'Расчет',
     badgeClassName: 'border-indigo-200 bg-indigo-50 text-indigo-700',
   },
 };

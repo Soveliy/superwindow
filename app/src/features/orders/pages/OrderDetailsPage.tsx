@@ -41,7 +41,8 @@ const existingOrderDefaultValues: OrderCustomerForm = {
   phone: '+7 (000) 000-00-00',
   address: 'Начните вводить адрес...',
   contractNumber: 'SW-2024-001',
-  readinessDate: '',
+  measurementDate: '',
+  productionDate: '',
   installationDate: '',
   comment: '',
 };
@@ -231,8 +232,8 @@ export const OrderDetailsPage = () => {
   const installationService = services.find((service) => service.type === 'installation');
   const deliveryService = services.find((service) => service.type === 'delivery');
 
-  const summaryLeadTime = form.readinessDate.trim()
-    ? `до ${form.readinessDate.trim()}`
+  const summaryLeadTime = form.productionDate.trim()
+    ? form.productionDate.trim()
     : order?.leadTime ?? orderDetailsMock.leadTime;
   const summaryCode = form.contractNumber.trim() || order?.code || orderDetailsMock.code;
   const summaryMargin = savedOrderAmount ? order?.margin ?? orderDetailsMock.margin : '—';
@@ -279,7 +280,7 @@ export const OrderDetailsPage = () => {
   };
 
   const handleDateChange =
-    (field: 'readinessDate' | 'installationDate') => (event: ChangeEvent<HTMLInputElement>) => {
+    (field: 'productionDate' | 'installationDate') => (event: ChangeEvent<HTMLInputElement>) => {
       setForm((state) => ({ ...state, [field]: formatDateInput(event.target.value) }));
     };
 
@@ -464,13 +465,13 @@ export const OrderDetailsPage = () => {
                       onChange={(event) => setForm((state) => ({ ...state, contractNumber: event.target.value }))}
                     />
                     <TextField
-                      label="Срок готовности"
+                      label="Дата изготовления"
                       placeholder="дд/мм/гггг"
                       inputMode="numeric"
                       maxLength={10}
                       readOnly={isCustomerFieldsReadonly}
-                      value={form.readinessDate}
-                      onChange={handleDateChange('readinessDate')}
+                      value={form.productionDate}
+                      onChange={handleDateChange('productionDate')}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">

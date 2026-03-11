@@ -1,10 +1,27 @@
 export type PackageType = 'budget' | 'standard' | 'premium';
-export type OpeningType = 'single' | 'double' | 'triple' | 'balcony';
+export type OpeningType =
+  | 'single'
+  | 'single_turn'
+  | 'double'
+  | 'double_left_active'
+  | 'double_right_active'
+  | 'double_dual_active'
+  | 'triple'
+  | 'triple_dual_active'
+  | 'triple_full_active'
+  | 'balcony'
+  | 'balcony_left_door'
+  | 'balcony_right_door';
 export type SealColor = 'black' | 'gray' | 'white';
-export type DrainageType = 'bottom' | 'front' | 'hidden';
+export type DrainageType = 'bottom' | 'none' | 'street';
 export type OpeningMode = 'fixed' | 'turn' | 'tilt_turn' | 'fanlight';
-export type DripMaterial = 'aluminum' | 'polyester' | 'galvanized';
+export type WindowColorSide = 'outside' | 'inside' | 'solid';
+export type WindowColor = 'white' | 'anthracite' | 'golden_oak' | 'dark_oak' | 'mahogany' | 'silver';
+export type HandleType = 'standard' | 'premium' | 'design';
+export type HandleColor = 'white' | 'brown' | 'silver' | 'gold';
 export type SillColor = 'white' | 'brown' | 'anthracite';
+export type MullionOrientation = 'vertical' | 'horizontal';
+export type MullionOffsets = Record<string, number>;
 export type SashId = 'single' | 'left' | 'center' | 'right';
 export type HandlePosition = 'none' | 'left' | 'right' | 'top';
 export type AdditionalOptionType = 'sill' | 'drip';
@@ -22,7 +39,6 @@ export interface CalculatorAdditionalOption {
   length?: number;
   width?: number;
   sillColor?: SillColor;
-  dripMaterial?: DripMaterial;
 }
 
 export interface CalculatorPosition {
@@ -35,8 +51,14 @@ export interface CalculatorPosition {
   packageType?: PackageType;
   sealColor?: SealColor;
   drainage?: DrainageType;
-  sashes?: CalculatorSashConfig[];
+  windowColorSide?: WindowColorSide;
+  windowColor?: WindowColor;
+  handleType?: HandleType;
+  handleColor?: HandleColor;
+  mullionOrientation?: MullionOrientation;
+  mullionOffsets?: MullionOffsets;
   additionalOptions?: CalculatorAdditionalOption[];
+  sashes?: CalculatorSashConfig[];
   leftSashMode?: OpeningMode;
   rightSashMode?: OpeningMode;
   mosquitoScreenEnabled?: boolean;
@@ -50,15 +72,34 @@ export interface CalculatorPosition {
 const CALCULATOR_POSITIONS_STORAGE_KEY = 'superwindow.calculator.positions.v1';
 
 const packageTypes = ['budget', 'standard', 'premium'] as const;
-const openingTypes = ['single', 'double', 'triple', 'balcony'] as const;
+const openingTypes = [
+  'single',
+  'single_turn',
+  'double',
+  'double_left_active',
+  'double_right_active',
+  'double_dual_active',
+  'triple',
+  'triple_dual_active',
+  'triple_full_active',
+  'balcony',
+  'balcony_left_door',
+  'balcony_right_door',
+] as const;
 const sealColors = ['black', 'gray', 'white'] as const;
-const drainageTypes = ['bottom', 'front', 'hidden'] as const;
+const drainageTypes = ['bottom', 'none', 'street'] as const;
 const openingModes = ['fixed', 'turn', 'tilt_turn', 'fanlight'] as const;
-const dripMaterials = ['aluminum', 'polyester', 'galvanized'] as const;
+const windowColorSides = ['outside', 'inside', 'solid'] as const;
+const windowColors = ['white', 'anthracite', 'golden_oak', 'dark_oak', 'mahogany', 'silver'] as const;
+const handleTypes = ['standard', 'premium', 'design'] as const;
+const handleColors = ['white', 'brown', 'silver', 'gold'] as const;
 const sillColors = ['white', 'brown', 'anthracite'] as const;
+const mullionOrientations = ['vertical', 'horizontal'] as const;
 const sashIds = ['single', 'left', 'center', 'right'] as const;
 const handlePositions = ['none', 'left', 'right', 'top'] as const;
 const additionalOptionTypes = ['sill', 'drip'] as const;
+
+const legacyOpeningTypes = ['single', 'double', 'triple', 'balcony'] as const;
 
 const isStorageAvailable = (): boolean => typeof window !== 'undefined' && Boolean(window.localStorage);
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object';
@@ -84,6 +125,54 @@ const normalizeOptionalString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 const normalizeOptionalEnum = <T extends string>(value: unknown, values: readonly T[]): T | undefined =>
   isOneOf(value, values) ? value : undefined;
+
+const normalizeOpeningType = (value: unknown): OpeningType | undefined => {
+  if (isOneOf(value, openingTypes)) {
+    return value;
+  }
+
+  if (isOneOf(value, legacyOpeningTypes)) {
+    return value;
+  }
+
+  return undefined;
+};
+
+const isMullionOffsets = (value: unknown): value is MullionOffsets => {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return Object.entries(value).every(
+    ([key, item]) => /^\d+$/.test(key) && typeof item === 'number' && Number.isFinite(item) && item >= 0,
+  );
+};
+
+const normalizeMullionOffsets = (value: unknown): MullionOffsets | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(value)
+    .filter(([key, item]) => /^\d+$/.test(key) && typeof item === 'number' && Number.isFinite(item) && item >= 0)
+    .map(
+      ([key, item]) =>
+        [String(Math.max(1, Math.trunc(Number.parseInt(key, 10)))), Math.max(0, Math.trunc(item as number))] as const,
+    )
+    .sort((first, second) => Number(first[0]) - Number(second[0]));
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  const normalized: MullionOffsets = {};
+
+  for (const [key, offset] of entries) {
+    normalized[key] = offset;
+  }
+
+  return normalized;
+};
 
 const isCalculatorSashConfig = (value: unknown): value is CalculatorSashConfig => {
   if (!isRecord(value)) {
@@ -130,8 +219,7 @@ const isCalculatorAdditionalOption = (value: unknown): value is CalculatorAdditi
     isOptionalOneOf(value.type, additionalOptionTypes) &&
     isOptionalNumber(value.length) &&
     isOptionalNumber(value.width) &&
-    isOptionalOneOf(value.sillColor, sillColors) &&
-    isOptionalOneOf(value.dripMaterial, dripMaterials)
+    isOptionalOneOf(value.sillColor, sillColors)
   );
 };
 
@@ -144,7 +232,6 @@ const normalizeAdditionalOption = (option: CalculatorAdditionalOption): Calculat
   const length = normalizeOptionalNumber(option.length);
   const width = normalizeOptionalNumber(option.width);
   const sillColor = normalizeOptionalEnum(option.sillColor, sillColors);
-  const dripMaterial = normalizeOptionalEnum(option.dripMaterial, dripMaterials);
 
   if (typeof length === 'number') {
     normalized.length = length;
@@ -154,9 +241,6 @@ const normalizeAdditionalOption = (option: CalculatorAdditionalOption): Calculat
   }
   if (sillColor) {
     normalized.sillColor = sillColor;
-  }
-  if (dripMaterial) {
-    normalized.dripMaterial = dripMaterial;
   }
 
   return normalized;
@@ -172,14 +256,20 @@ export const isCalculatorPosition = (value: unknown): value is CalculatorPositio
     isOptionalNumber(value.width) &&
     isOptionalNumber(value.height) &&
     isOptionalNumber(value.price) &&
-    isOptionalOneOf(value.openingType, openingTypes) &&
+    (typeof value.openingType === 'undefined' || normalizeOpeningType(value.openingType) !== undefined) &&
     isOptionalString(value.profileId) &&
     isOptionalOneOf(value.packageType, packageTypes) &&
     isOptionalOneOf(value.sealColor, sealColors) &&
     isOptionalOneOf(value.drainage, drainageTypes) &&
-    (typeof value.sashes === 'undefined' || (Array.isArray(value.sashes) && value.sashes.every(isCalculatorSashConfig))) &&
+    isOptionalOneOf(value.windowColorSide, windowColorSides) &&
+    isOptionalOneOf(value.windowColor, windowColors) &&
+    isOptionalOneOf(value.handleType, handleTypes) &&
+    isOptionalOneOf(value.handleColor, handleColors) &&
+    isOptionalOneOf(value.mullionOrientation, mullionOrientations) &&
+    (typeof value.mullionOffsets === 'undefined' || isMullionOffsets(value.mullionOffsets)) &&
     (typeof value.additionalOptions === 'undefined' ||
       (Array.isArray(value.additionalOptions) && value.additionalOptions.every(isCalculatorAdditionalOption))) &&
+    (typeof value.sashes === 'undefined' || (Array.isArray(value.sashes) && value.sashes.every(isCalculatorSashConfig))) &&
     isOptionalOneOf(value.leftSashMode, openingModes) &&
     isOptionalOneOf(value.rightSashMode, openingModes) &&
     isOptionalBoolean(value.mosquitoScreenEnabled) &&
@@ -199,15 +289,21 @@ export const normalizeCalculatorPosition = (position: CalculatorPosition): Calcu
   const width = normalizeOptionalNumber(position.width);
   const height = normalizeOptionalNumber(position.height);
   const price = normalizeOptionalNumber(position.price);
-  const openingType = normalizeOptionalEnum(position.openingType, openingTypes);
+  const openingType = normalizeOpeningType(position.openingType);
   const profileId = normalizeOptionalString(position.profileId);
   const packageType = normalizeOptionalEnum(position.packageType, packageTypes);
   const sealColor = normalizeOptionalEnum(position.sealColor, sealColors);
   const drainage = normalizeOptionalEnum(position.drainage, drainageTypes);
-  const sashes = Array.isArray(position.sashes) ? position.sashes.filter(isCalculatorSashConfig).map(normalizeSashConfig) : [];
+  const windowColorSide = normalizeOptionalEnum(position.windowColorSide, windowColorSides);
+  const windowColor = normalizeOptionalEnum(position.windowColor, windowColors);
+  const handleType = normalizeOptionalEnum(position.handleType, handleTypes);
+  const handleColor = normalizeOptionalEnum(position.handleColor, handleColors);
+  const mullionOrientation = normalizeOptionalEnum(position.mullionOrientation, mullionOrientations);
+  const mullionOffsets = normalizeMullionOffsets(position.mullionOffsets);
   const additionalOptions = Array.isArray(position.additionalOptions)
     ? position.additionalOptions.filter(isCalculatorAdditionalOption).map(normalizeAdditionalOption)
     : [];
+  const sashes = Array.isArray(position.sashes) ? position.sashes.filter(isCalculatorSashConfig).map(normalizeSashConfig) : [];
   const leftSashMode = normalizeOptionalEnum(position.leftSashMode, openingModes);
   const rightSashMode = normalizeOptionalEnum(position.rightSashMode, openingModes);
   const mosquitoScreenEnabled = normalizeOptionalBoolean(position.mosquitoScreenEnabled);
@@ -241,11 +337,29 @@ export const normalizeCalculatorPosition = (position: CalculatorPosition): Calcu
   if (drainage) {
     normalized.drainage = drainage;
   }
-  if (sashes.length > 0) {
-    normalized.sashes = sashes;
+  if (windowColorSide) {
+    normalized.windowColorSide = windowColorSide;
+  }
+  if (windowColor) {
+    normalized.windowColor = windowColor;
+  }
+  if (handleType) {
+    normalized.handleType = handleType;
+  }
+  if (handleColor) {
+    normalized.handleColor = handleColor;
+  }
+  if (mullionOrientation) {
+    normalized.mullionOrientation = mullionOrientation;
+  }
+  if (mullionOffsets) {
+    normalized.mullionOffsets = mullionOffsets;
   }
   if (additionalOptions.length > 0) {
     normalized.additionalOptions = additionalOptions;
+  }
+  if (sashes.length > 0) {
+    normalized.sashes = sashes;
   }
   if (leftSashMode) {
     normalized.leftSashMode = leftSashMode;

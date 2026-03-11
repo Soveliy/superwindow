@@ -17,11 +17,14 @@ interface FilterOption {
 
 const filterOptions: FilterOption[] = [
   { id: 'all', label: 'Все' },
-  { id: 'new', label: 'Новые' },
-  { id: 'in_progress', label: 'В работе' },
-  { id: 'ready', label: 'Готовы' },
+  { id: 'new', label: 'Расчет' },
+  { id: 'in_progress', label: 'В производстве' },
+  { id: 'ready', label: 'Монтаж' },
   { id: 'paid', label: 'Оплачены' },
 ];
+
+const normalizeSearchValue = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ');
+const normalizeDigits = (value: string): string => value.replace(/\D/g, '');
 
 const OrderCard = ({ order }: { order: OrderSummary }) => {
   const status = getOrderStatusUi(order.status);
@@ -40,7 +43,7 @@ const OrderCard = ({ order }: { order: OrderSummary }) => {
           </p>
         </div>
         <span
-          className={`rounded-full border px-2 py-1 text-[12px] font-bold uppercase tracking-wide ${status.badgeClassName}`}
+          className={`flex-shrink-0 rounded-full border px-2 py-1 text-[12px] font-bold uppercase tracking-wide ${status.badgeClassName}`}
         >
           {status.label}
         </span>
@@ -48,7 +51,7 @@ const OrderCard = ({ order }: { order: OrderSummary }) => {
 
       <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
-          <p className="font-semibold uppercase tracking-wide text-slate-400">Срок</p>
+          <p className="font-semibold uppercase tracking-wide text-slate-400">Дата изготовления</p>
           <p className="mt-1 font-bold text-ink-700">{order.leadTime}</p>
         </div>
         <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
@@ -80,27 +83,47 @@ export const OrdersPage = () => {
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<OrdersFilter>('all');
 
-  const filteredOrders = useMemo(() => {
-    const orders = ordersStorage.getOrders();
-    const normalizedQuery = orderSearchQuery.trim().toLowerCase();
-    const normalizedDigitsQuery = normalizedQuery.replace(/\D/g, '');
+  const orders = useMemo(() => ordersStorage.getOrders(), []);
+  const normalizedQuery = normalizeSearchValue(orderSearchQuery);
+  const normalizedDigitsQuery = normalizeDigits(normalizedQuery);
 
-    return orders.filter((order) => {
-      const matchesStatus = activeFilter === 'all' ? true : order.status === activeFilter;
-      const normalizedOrderId = order.id.toLowerCase();
-      const normalizedOrderDigits = normalizedOrderId.replace(/\D/g, '');
-      const normalizedCustomer = order.customer.toLowerCase();
-      const matchesOrderByText = normalizedQuery ? normalizedOrderId.includes(normalizedQuery) : true;
-      const matchesOrderByDigits = normalizedDigitsQuery
-        ? normalizedOrderDigits.includes(normalizedDigitsQuery)
-        : false;
-      const matchesOrder = matchesOrderByText || matchesOrderByDigits;
-      const matchesCustomer = normalizedQuery ? normalizedCustomer.includes(normalizedQuery) : true;
-      const matchesSearch = matchesOrder || matchesCustomer;
+  const statusCounts = useMemo(() => {
+    const initialCounts: Record<OrdersFilter, number> = {
+      all: orders.length,
+      new: 0,
+      in_progress: 0,
+      ready: 0,
+      paid: 0,
+    };
 
-      return matchesStatus && matchesSearch;
-    });
-  }, [activeFilter, orderSearchQuery]);
+    return orders.reduce((counts, order) => {
+      counts[order.status] += 1;
+      return counts;
+    }, initialCounts);
+  }, [orders]);
+
+  const filteredOrders = useMemo(
+    () =>
+      orders.filter((order) => {
+        const matchesStatus = activeFilter === 'all' ? true : order.status === activeFilter;
+
+        if (!matchesStatus) {
+          return false;
+        }
+
+        if (!normalizedQuery) {
+          return true;
+        }
+
+        const haystack = [order.id, order.code, order.customer]
+          .map((item) => normalizeSearchValue(item))
+          .join(' ');
+        const digitsHaystack = [order.id, order.code].map((item) => normalizeDigits(item)).join('');
+
+        return haystack.includes(normalizedQuery) || (normalizedDigitsQuery ? digitsHaystack.includes(normalizedDigitsQuery) : false);
+      }),
+    [activeFilter, normalizedDigitsQuery, normalizedQuery, orders],
+  );
 
   return (
     <div className="min-h-screen bg-page px-2 py-3">
@@ -132,7 +155,7 @@ export const OrdersPage = () => {
               type="text"
               value={orderSearchQuery}
               onChange={(event) => setOrderSearchQuery(event.target.value)}
-              placeholder="Поиск по номеру или имени клиента..."
+              placeholder="Поиск по номеру заказа или имени клиента..."
               className="h-11 flex-1 border-none bg-transparent text-sm text-ink-700 outline-none placeholder:text-slate-400"
             />
             <button
@@ -154,13 +177,21 @@ export const OrdersPage = () => {
                   type="button"
                   onClick={() => setActiveFilter(filterOption.id)}
                   className={cn(
-                    'rounded-full whitespace-nowrap border px-5 py-2 text-sm font-semibold transition-colors',
+                    'inline-flex items-center gap-2 rounded-full whitespace-nowrap border px-4 py-2 text-sm font-semibold transition-colors',
                     isActive
                       ? 'border-brand-700 bg-brand-50 text-ink-700'
                       : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100',
                   )}
                 >
-                  {filterOption.label}
+                  <span>{filterOption.label}</span>
+                  <span
+                    className={cn(
+                      'inline-flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold',
+                      isActive ? 'text-ink-800' : 'bg-slate-100 text-slate-500',
+                    )}
+                  >
+                    {statusCounts[filterOption.id]}
+                  </span>
                 </button>
               );
             })}
