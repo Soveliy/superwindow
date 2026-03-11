@@ -768,7 +768,9 @@ export const CalculatorPage = () => {
                         </span>
 
                         <span className="absolute inset-y-8 rounded-sm overflow-hidden border-2 border-white">
-                          <img className="h-full w-full object-cover rounded-none opacity-50" src="/back.jpg" alt="" />
+
+
+                          <img className="h-full w-full object-cover rounded-none opacity-50" src={`${import.meta.env.BASE_URL}back.jpg`} alt="" />
                             {mode === 'fixed' ? <span className="absolute h-full top-0 left-0 w-full rounded-[2px] bg-slate-100/80" /> : null}
                               {mosquitoEnabled ? <span className="absolute h-full w-full top-0 left-0 z-10 opacity-40" style={mosquitoPatternStyle} /> : null}
                         </span>
