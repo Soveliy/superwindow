@@ -934,93 +934,131 @@ export const CalculatorPage = () => {
                   ))}
                 </div>
 
-              </div>
-
-              <div>
-                <div className={cn('flex h-64 overflow-x-auto gap-1', getGridColumnsClass(previewSashIds.length))}>
-                  {previewSashIds.map((sashId) => {
-                    const sash = draft.sashes.find((item) => item.id === sashId);
-                    const mode = sash?.mode ?? 'fixed';
-                    const handlePosition = sash?.handlePosition ?? getDefaultHandlePosition(mode, sashId);
-                    const isActive = activeSashId === sashId;
-                    const mosquitoEnabled = sash?.mosquitoScreenEnabled ?? false;
-                    const isTwoItems = previewSashIds.length === 2;
-
-                    return (
-                      <button
-                        key={`preview-${sashId}`}
-                        type="button"
-                        onClick={() => setActiveSashId(sashId)}
-                        className={cn(
-                          'relative rounded-0 text-left transition-all',
-                          //  index !== 0 && 'ml-[-2px]'
-                          isTwoItems ? 'w-[calc(50%-2px)]' : 'min-w-36',
-                          isActive
-                            ? 'z-40'
-                            : 'opacity-20',
-                        )}
-                      >
 
 
-                        <span className="absolute left-0 w-full top-2 flex items-center justify-between gap-2">
-                          <span className={cn('text-[10px] font-semibold uppercase tracking-[0.18em]', isActive ? 'text-brand-600' : 'text-slate-500')}>
-                            {sashLabels[sashId]}
+                <article>
+                  <div
+                    ref={mullionPreviewRef}
+                    className="relative mx-auto aspect-[4/3] w-full max-w-[420px] overflow-hidden rounded-lg border border-slate-300 bg-slate-100"
+                    style={{ touchAction: 'none' }}
+                  >
+                    <div className="absolute inset-3 rounded-md border border-slate-300 bg-slate-200/80" />
+
+                    {mullionSegments.map((segment, index) => {
+                      const segmentPosition = mullionSegments.slice(0, index).reduce((total, value) => total + value, 0);
+                      const segmentSizePercent = mullionAxisSize > 0 ? (segment / mullionAxisSize) * 100 : 0;
+                      const segmentOffsetPercent = mullionAxisSize > 0 ? (segmentPosition / mullionAxisSize) * 100 : 0;
+
+                      return (
+                        <div
+                          key={`segment-${index}`}
+                          className={cn(
+                            'absolute text-[10px] font-semibold text-slate-500',
+                            draft.mullionOrientation === 'vertical' ? 'bottom-4 top-4' : 'left-4 right-4',
+                          )}
+                          style={
+                            draft.mullionOrientation === 'vertical'
+                              ? { left: `${segmentOffsetPercent}%`, width: `${segmentSizePercent}%` }
+                              : { bottom: `${segmentOffsetPercent}%`, height: `${segmentSizePercent}%` }
+                          }
+                        >
+                          <span
+                            className={cn(
+                              'absolute rounded bg-white/80 px-1.5 py-0.5',
+                              draft.mullionOrientation === 'vertical'
+                                ? 'left-1/2 top-2 -translate-x-1/2'
+                                : 'left-2 top-1/2 -translate-y-1/2',
+                            )}
+                          >
+                            {Math.round(segment)} мм
                           </span>
-                          {mosquitoEnabled ? (
-                            <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
-                              Сетка
-                            </span>
-                          ) : null}
-                        </span>
+                        </div>
+                      );
+                    })}
 
-                        <span className="absolute inset-y-8 rounded-sm overflow-hidden border-2 border-white">
+                    {Array.from({ length: mullionCount }, (_, index) => index + 1).map((mullionIndex) => {
+                      const offset = normalizedMullionOffsets[String(mullionIndex)] ?? 0;
+                      const offsetPercent = mullionAxisSize > 0 ? (offset / mullionAxisSize) * 100 : 0;
+                      const isActive = activeMullionId === mullionIndex;
+
+                      return (
+                        <button
+                          key={`mullion-${mullionIndex}`}
+                          type="button"
+                          onPointerDown={(event) => handleMullionPointerDown(event, mullionIndex)}
+                          onPointerMove={handleMullionPointerMove}
+                          onPointerUp={handleMullionPointerEnd}
+                          onPointerCancel={handleMullionPointerEnd}
+                          className={cn(
+                            'absolute z-20 rounded bg-brand-600 shadow-sm outline-none transition-colors',
+                            draft.mullionOrientation === 'vertical'
+                              ? 'bottom-2 top-2 w-3 -translate-x-1/2 cursor-col-resize'
+                              : 'left-2 right-2 h-3 translate-y-1/2 cursor-row-resize',
+                            isActive ? 'bg-brand-600' : 'hover:bg-brand-600',
+                          )}
+                          style={
+                            draft.mullionOrientation === 'vertical'
+                              ? { left: `${offsetPercent}%`, touchAction: 'none' }
+                              : { bottom: `${offsetPercent}%`, touchAction: 'none' }
+                          }
+                        >
+                          <span className="sr-only">Импост {mullionIndex}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">
+                    {mullionControlMode === 'drag'
+                      ? 'Перетащите импост, чтобы изменить размеры секций. На телефоне работает через касание и удержание.'
+                      : 'Используйте поля ниже для точного задания расстояний.'}
+                  </p>
+                </article>
 
 
-                          <img className="h-full w-full object-cover rounded-none opacity-50" src={`${import.meta.env.BASE_URL}back.jpg`} alt="" />
-                            {mode === 'fixed' ? <span className="absolute h-full top-0 left-0 w-full rounded-[2px] bg-slate-100/80" /> : null}
-                              {mosquitoEnabled ? <span className="absolute h-full w-full top-0 left-0 z-10 opacity-40" style={mosquitoPatternStyle} /> : null}
-                        </span>
+                  <div className="space-y-3">
+                    {Array.from({ length: mullionCount }, (_, index) => index + 1).map((mullionIndex) => {
+                      const offset = normalizedMullionOffsets[String(mullionIndex)] ?? 0;
+                      const reverseOffset = Math.max(0, mullionAxisSize - offset);
 
+                      return (
+                        <article key={`input-${mullionIndex}`} className="rounded-xl border border-slate-200 p-3">
+                          <p className="mb-3 text-sm font-semibold text-ink-800">Импост {mullionIndex}</p>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                {mullionFirstPartLabel}
+                              </span>
+                              <input
+                                value={offset}
+                                inputMode="numeric"
+                                onChange={(event) => {
+                                  const digits = Number.parseInt(event.target.value.replace(/\D/g, ''), 10);
+                                  setMullionOffset(mullionIndex, Number.isFinite(digits) ? digits : offset);
+                                }}
+                                className="w-full border-none bg-transparent text-lg font-extrabold text-ink-800 outline-none"
+                              />
+                            </label>
 
-
-
-                        {(mode === 'turn' || mode === 'tilt_turn') ? (
-                          <span
-                            className={cn(
-                              'absolute inset-y-8 w-5  border-brand-400/70',
-                              handlePosition === 'left'
-                                ? 'left-0 border-l-2 rounded-none'
-                                : 'right-0 border-r-2 rounded-none',
-                            )}
-                          />
-                        ) : null}
-
-                        {mode === 'tilt_turn' ? (
-                          <span className="absolute w-full top-8 h-1 rounded-t-[2px] border-x-2 border-t-2 border-brand-400/70" />
-                        ) : null}
-
-                        {mode === 'fanlight' ? (
-                          <span className="absolute w-full top-8 h-1 rounded-t-[2px] border-x-2 border-t-2 border-brand-400/70" />
-                        ) : null}
-
-                        {handlePosition !== 'none' ? (
-                          <span
-                            className={cn(
-                              'absolute rounded-full bg-brand-400',
-                              handlePosition === 'left' ? 'left-0 top-1/2 h-8 w-[6px] -translate-y-1/2' : null,
-                              handlePosition === 'right' ? 'right-0 mr-[-2px] top-1/2 h-8 w-[6px] -translate-y-1/2' : null,
-                              handlePosition === 'top' ? 'left-1/2 top-8 mt-[-1px] h-[4px] w-8 -translate-x-1/2' : null,
-                            )}
-                          />
-                        ) : null}
-
-                        <span className="absolute l-0 bottom-2 rounded-lg  text-[11px] font-semibold text-slate-600 backdrop-blur-sm">
-                          {getOpeningModeLabel(sash?.mode)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                            <label className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                {mullionSecondPartLabel}
+                              </span>
+                              <input
+                                value={reverseOffset}
+                                inputMode="numeric"
+                                onChange={(event) => {
+                                  const digits = Number.parseInt(event.target.value.replace(/\D/g, ''), 10);
+                                  const nextReverseOffset = Number.isFinite(digits) ? digits : reverseOffset;
+                                  setMullionOffset(mullionIndex, mullionAxisSize - nextReverseOffset);
+                                }}
+                                className="w-full border-none bg-transparent text-lg font-extrabold text-ink-800 outline-none"
+                              />
+                            </label>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
 
 
 
