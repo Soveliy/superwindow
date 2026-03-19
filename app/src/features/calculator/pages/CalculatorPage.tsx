@@ -82,18 +82,16 @@ const profileCatalog = [
 ] as const;
 
 const openingTypeOptions: Array<{ id: OpeningType; label: string; factor: number; image: string }> = [
-  { id: 'single', label: 'Одностворчатое окно', factor: 1, image: withBase('/windows/1.png') },
-  { id: 'single_turn', label: 'Одностворчатое окно (поворотное)', factor: 1.08, image: withBase('/windows/1.png') },
-  { id: 'double', label: 'Двухстворчатое окно', factor: 1.48, image: withBase('/windows/2.png') },
-  { id: 'double_left_active', label: 'Двухстворчатое окно (активная левая)', factor: 1.56, image: withBase('/windows/2.png') },
-  { id: 'double_right_active', label: 'Двухстворчатое окно (активная правая)', factor: 1.56, image: withBase('/windows/2.png') },
-  { id: 'double_dual_active', label: 'Двухстворчатое окно (две активные)', factor: 1.62, image: withBase('/windows/2.png') },
-  { id: 'triple', label: 'Трехстворчатое окно', factor: 1.93, image: withBase('/windows/3.png') },
-  { id: 'triple_dual_active', label: 'Трехстворчатое окно (две активные)', factor: 2.03, image: withBase('/windows/3.png') },
-  { id: 'triple_full_active', label: 'Трехстворчатое окно (три активные)', factor: 2.14, image: withBase('/windows/3.png') },
-  { id: 'balcony', label: 'Балконная дверь', factor: 2.12, image: withBase('/windows/4.png') },
-  { id: 'balcony_left_door', label: 'Балконная дверь (левая)', factor: 2.22, image: withBase('/windows/4.png') },
-  { id: 'balcony_right_door', label: 'Балконная дверь (правая)', factor: 2.22, image: withBase('/windows/4.png') },
+  { id: 'single', label: 'Одностворчатое окно', factor: 1, image: withBase('/windows/9.svg') },
+  { id: 'single_turn', label: 'Одностворчатое окно (поворотное)', factor: 1.08, image: withBase('/windows/7.svg') },
+  { id: 'double', label: 'Двухстворчатое окно', factor: 1.48, image: withBase('/windows/8.svg') },
+  { id: 'double_left_active', label: 'Двухстворчатое окно (активная левая)', factor: 1.56, image: withBase('/windows/5.svg') },
+  { id: 'double_right_active', label: 'Двухстворчатое окно (активная правая)', factor: 1.56, image: withBase('/windows/6.svg') },
+  { id: 'double_dual_active', label: 'Двухстворчатое окно (две активные)', factor: 1.62, image: withBase('/windows/4.svg') },
+  { id: 'triple', label: 'Трехстворчатое окно', factor: 1.93, image: withBase('/windows/3.svg') },
+  { id: 'triple_dual_active', label: 'Трехстворчатое окно (две активные)', factor: 2.03, image: withBase('/windows/2.svg') },
+  // { id: 'triple_full_active', label: 'Трехстворчатое окно (три активные)', factor: 2.14, image: withBase('/windows/7.svg') },
+  { id: 'balcony', label: 'Балконная дверь', factor: 2.12, image: withBase('/windows/1.svg') },
 ];
 
 const packageOptions: Array<{ id: PackageType; label: string; factor: number }> = [
@@ -166,11 +164,6 @@ const sillColorOptions: Array<{ id: SillColor; label: string; extra: number }> =
 const mullionOrientationOptions: Array<{ id: MullionOrientation; label: string }> = [
   { id: 'vertical', label: 'Вертикальный' },
   { id: 'horizontal', label: 'Горизонтальный' },
-];
-
-const mullionControlModeOptions: Array<{ id: MullionControlMode; label: string }> = [
-  { id: 'drag', label: 'Drag & Drop' },
-  { id: 'input', label: 'Точный ввод' },
 ];
 
 const defaultDrainage: DrainageType = 'bottom';
@@ -443,7 +436,7 @@ export const CalculatorPage = () => {
   const [isOptionDialogOpen, setOptionDialogOpen] = useState(false);
   const [editingOptionId, setEditingOptionId] = useState<number | null>(null);
   const [optionForm, setOptionForm] = useState<OptionFormState>(() => createDefaultOptionForm());
-  const [mullionControlMode, setMullionControlMode] = useState<MullionControlMode>('drag');
+  const [mullionControlMode] = useState<MullionControlMode>('drag');
   const [activeMullionId, setActiveMullionId] = useState<number | null>(null);
   const mullionPreviewRef = useRef<HTMLDivElement | null>(null);
   const mullionDragStateRef = useRef<{ pointerId: number; index: number } | null>(null);
@@ -507,15 +500,6 @@ export const CalculatorPage = () => {
     return segments;
   }, [mullionAxisSize, mullionCount, normalizedMullionOffsets]);
 
-  const mullionExchangePayload = useMemo(() => {
-    const payload: Record<string, number> = {};
-
-    for (let index = 1; index <= mullionCount; index += 1) {
-      payload[String(index)] = normalizedMullionOffsets[String(index)] ?? 0;
-    }
-
-    return payload;
-  }, [mullionCount, normalizedMullionOffsets]);
   const mullionFirstPartLabel = draft.mullionOrientation === 'vertical' ? 'Левая часть, мм' : 'Нижняя часть, мм';
   const mullionSecondPartLabel = draft.mullionOrientation === 'vertical' ? 'Правая часть, мм' : 'Верхняя часть, мм';
   const mullionFromEdgeLabel = draft.mullionOrientation === 'vertical' ? 'от левого края' : 'от нижнего края';
@@ -749,9 +733,9 @@ export const CalculatorPage = () => {
                   type="button"
                   active={draft.openingType === item.id}
                   onClick={() => setDraft((value) => ({ ...value, openingType: item.id }))}
-                  className="min-h-[128px] flex-col items-stretch justify-start"
+                  className="min-h-[128px] flex-col items-stretch justify-start text-center"
                 >
-                  <span className="mb-3 flex h-14 items-center justify-center overflow-hidden rounded-lg px-2 py-1">
+                  <span className="mb-3 flex h-24 items-center justify-center overflow-hidden rounded-lg px-2 py-1">
                     <img src={item.image} alt={item.label} className="h-full w-full object-contain" />
                   </span>
                   <span className="text-sm font-bold text-ink-700">{item.label}</span>

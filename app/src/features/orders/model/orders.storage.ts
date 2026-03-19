@@ -12,6 +12,7 @@ import {
 
 const ORDER_DRAFTS_STORAGE_KEY = 'superwindow.orders.drafts.v1';
 const DEFAULT_MARGIN = '18%';
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface OrderCustomerForm {
   fullName: string;
@@ -85,6 +86,30 @@ const isOrderService = (value: unknown): value is OrderService => {
 const isValidDraftServices = (value: unknown): value is OrderService[] | undefined =>
   typeof value === 'undefined' || (Array.isArray(value) && value.every(isOrderService));
 
+const normalizeDateValue = (value: string): string => {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return '';
+  }
+
+  if (isoDatePattern.test(trimmed)) {
+    return trimmed;
+  }
+
+  const match = trimmed.match(/^(\d{2})[./-](\d{2})[./-](\d{4})$/);
+
+  if (!match) {
+    return '';
+  }
+
+  const [, day, month, year] = match;
+  const normalized = `${year}-${month}-${day}`;
+  const parsed = new Date(`${normalized}T00:00:00`);
+
+  return Number.isNaN(parsed.getTime()) ? '' : normalized;
+};
+
 const createEmptyOrderCustomerForm = (): OrderCustomerForm => ({
   fullName: '',
   phone: '',
@@ -151,9 +176,9 @@ const normalizeOrderCustomerForm = (value: OrderCustomerForm | LegacyOrderCustom
       phone: value.phone,
       address: value.address,
       contractNumber: value.contractNumber,
-      measurementDate: value.measurementDate,
-      productionDate: value.productionDate,
-      installationDate: value.installationDate,
+      measurementDate: normalizeDateValue(value.measurementDate),
+      productionDate: normalizeDateValue(value.productionDate),
+      installationDate: normalizeDateValue(value.installationDate),
       comment: value.comment,
     };
   }
@@ -164,8 +189,8 @@ const normalizeOrderCustomerForm = (value: OrderCustomerForm | LegacyOrderCustom
     address: value.address,
     contractNumber: value.contractNumber,
     measurementDate: '',
-    productionDate: value.readinessDate,
-    installationDate: value.installationDate,
+    productionDate: normalizeDateValue(value.readinessDate),
+    installationDate: normalizeDateValue(value.installationDate),
     comment: value.comment,
   };
 };
