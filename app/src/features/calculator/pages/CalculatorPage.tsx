@@ -172,11 +172,6 @@ const sillColorOptions: Array<{ id: SillColor; label: string; extra: number }> =
   { id: 'anthracite', label: 'Антрацит', extra: 380 },
 ];
 
-const mullionOrientationOptions: Array<{ id: MullionOrientation; label: string }> = [
-  { id: 'vertical', label: 'Вертикальный' },
-  { id: 'horizontal', label: 'Горизонтальный' },
-];
-
 const defaultDrainage: DrainageType = 'bottom';
 const defaultSealColor: SealColor = 'black';
 const defaultWindowColorSide: WindowColorSide = 'solid';
@@ -1113,7 +1108,8 @@ export const CalculatorPage = () => {
                           onPointerUp={handleMullionPointerEnd}
                           onPointerCancel={handleMullionPointerEnd}
                           className={cn(
-                            'absolute z-20 shadow-sm outline-none bg-slate-100 border border-cyan-800 transition-colors',
+                            'absolute z-20 shadow-sm outline-none border transition-colors',
+                            isActive ? 'bg-slate-50 border-brand-500' : 'bg-slate-100 border-cyan-800',
                             draft.mullionOrientation === 'vertical'
                               ? 'bottom-3 top-3 w-3 -translate-x-1/2 cursor-col-resize'
                               : 'left-2 right-2 h-3 translate-y-1/2 cursor-row-resize',

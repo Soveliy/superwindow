@@ -1,24 +1,17 @@
-import { useState } from 'react';
 import {
   ArrowLeft,
   Bell,
   Building2,
-  CalendarPlus2,
   ChevronRight,
   LockKeyhole,
   LogOut,
   Moon,
   Sun,
-  Trash2,
   UserRound,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
 import { authStorage } from '@/features/auth/model/auth-storage';
-import {
-  readAvailableProductionDates,
-  writeAvailableProductionDates,
-} from '@/features/settings/model/production-dates.storage';
 import { type AppTheme, useTheme } from '@/shared/theme/ThemeProvider';
 import { Button } from '@/shared/ui/Button';
 
@@ -45,45 +38,10 @@ const themeOptions: Array<{ id: AppTheme; label: string; icon: typeof Sun }> = [
 export const SettingsPage = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const [productionDates, setProductionDates] = useState<string[]>(() => readAvailableProductionDates());
-  const [productionDateInput, setProductionDateInput] = useState('');
 
   const handleLogout = (): void => {
     authStorage.clearSession();
     navigate('/login', { replace: true });
-  };
-
-  const syncProductionDates = (nextDates: string[]): void => {
-    const normalizedDates = [...new Set(nextDates.filter(Boolean))].sort((first, second) => first.localeCompare(second));
-    setProductionDates(normalizedDates);
-    writeAvailableProductionDates(normalizedDates);
-  };
-
-  const addProductionDate = (): void => {
-    if (!productionDateInput) {
-      return;
-    }
-
-    syncProductionDates([...productionDates, productionDateInput]);
-    setProductionDateInput('');
-  };
-
-  const removeProductionDate = (date: string): void => {
-    syncProductionDates(productionDates.filter((item) => item !== date));
-  };
-
-  const formatProductionDate = (value: string): string => {
-    const parsedDate = new Date(`${value}T00:00:00`);
-
-    if (Number.isNaN(parsedDate.getTime())) {
-      return value;
-    }
-
-    return new Intl.DateTimeFormat('ru-RU', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    }).format(parsedDate);
   };
 
   return (

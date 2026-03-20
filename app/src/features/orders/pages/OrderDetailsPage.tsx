@@ -315,15 +315,7 @@ export const OrderDetailsPage = () => {
   const installationRangeLabel = form.installationDate ? formatIsoDateRange(form.installationDate) : '';
   const productionDateLabel = form.productionDate ? formatIsoDate(form.productionDate) : '';
 
-  const summaryLeadTime = form.productionDate.trim()
-    ? productionDateLabel || order?.leadTime || orderDetailsMock.leadTime
-    : form.installationDate.trim()
-      ? `монтаж ${installationRangeLabel || form.installationDate.trim()}`
-      : form.measurementDate.trim()
-        ? `замер ${measurementRangeLabel || form.measurementDate.trim()}`
-        : order?.leadTime ?? orderDetailsMock.leadTime;
   const summaryCode = form.contractNumber.trim() || order?.code || orderDetailsMock.code;
-  const summaryMargin = savedOrderAmount ? order?.margin ?? orderDetailsMock.margin : '—';
 
   useEffect(() => {
     setForm(getInitialFormValues(orderId));
