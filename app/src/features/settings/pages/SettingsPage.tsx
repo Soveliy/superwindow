@@ -162,7 +162,7 @@ export const SettingsPage = () => {
             </div>
           </article>
 
-          <article className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          {/* <article className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <h2 className="mb-1 text-xl font-extrabold tracking-tight text-ink-800">Даты изготовления</h2>
             <p className="text-xs text-slate-500">Эти даты будут доступны менеджеру при выборе даты изготовления заказа.</p>
 
@@ -213,7 +213,7 @@ export const SettingsPage = () => {
                 Пока не добавлено ни одной доступной даты изготовления.
               </div>
             )}
-          </article>
+          </article> */}
 
           <section>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Данные аккаунта</p>

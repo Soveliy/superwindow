@@ -1,4 +1,12 @@
-﻿import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type PointerEvent as ReactPointerEvent } from 'react';
+﻿import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import {
   ArrowLeft,
   Check,
@@ -69,6 +77,9 @@ interface OptionFormState {
 }
 
 type MullionControlMode = 'drag' | 'input';
+type DimensionField = 'width' | 'height';
+type DimensionInputState = Record<DimensionField, string>;
+type DimensionErrorState = Record<DimensionField, string | null>;
 
 const withBase = (path: string): string => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
 
@@ -115,7 +126,7 @@ const sealColorOptions: Array<{ id: SealColor; label: string; extra: number }> =
 const drainageOptions: Array<{ id: DrainageType; label: string; extra: number }> = [
   { id: 'bottom', label: 'Снизу', extra: 0 },
   { id: 'none', label: 'Нет', extra: 0 },
-  { id: 'street', label: 'Со стороны улицы', extra: 120 },
+  { id: 'street', label: 'С улицы', extra: 120 },
 ];
 
 const windowColorSideOptions: Array<{ id: WindowColorSide; label: string }> = [
@@ -168,7 +179,7 @@ const mullionOrientationOptions: Array<{ id: MullionOrientation; label: string }
 
 const defaultDrainage: DrainageType = 'bottom';
 const defaultSealColor: SealColor = 'black';
-const defaultWindowColorSide: WindowColorSide = 'outside';
+const defaultWindowColorSide: WindowColorSide = 'solid';
 const defaultWindowColor: WindowColor = 'white';
 const defaultHandleType: HandleType = 'standard';
 const defaultHandleColor: HandleColor = 'white';
@@ -322,7 +333,9 @@ const getMullionBounds = (
   return { min, max };
 };
 
-const clampDimension = (value: number): number => Math.max(500, Math.min(3200, value));
+const DIMENSION_MIN = 500;
+const DIMENSION_MAX = 3200;
+const clampDimension = (value: number): number => Math.max(DIMENSION_MIN, Math.min(DIMENSION_MAX, value));
 const clampOptionLength = (value: number): number => Math.max(300, Math.min(6000, value));
 const clampOptionWidth = (value: number): number => Math.max(50, Math.min(1000, value));
 
@@ -331,8 +344,6 @@ const normalizePositionId = (value: unknown): number | null =>
 const isProfileId = (value: string | undefined): value is ProfileId => profileCatalog.some((item) => item.id === value);
 const isOpeningType = (value: string | undefined): value is OpeningType =>
   openingTypeOptions.some((item) => item.id === value);
-const isWindowColorSide = (value: string | undefined): value is WindowColorSide =>
-  windowColorSideOptions.some((item) => item.id === value);
 const isWindowColor = (value: string | undefined): value is WindowColor =>
   windowColorOptions.some((item) => item.id === value);
 const isHandleType = (value: string | undefined): value is HandleType =>
@@ -381,7 +392,7 @@ const createDraftFromPosition = (position?: CalculatorPosition): DraftState => {
     profileId: isProfileId(position.profileId) ? position.profileId : defaults.profileId,
     drainage: position.drainage ?? defaults.drainage,
     sealColor: position.sealColor ?? defaults.sealColor,
-    windowColorSide: isWindowColorSide(position.windowColorSide) ? position.windowColorSide : defaults.windowColorSide,
+    windowColorSide: position.windowColorSide === 'solid' ? 'solid' : defaults.windowColorSide,
     windowColor: isWindowColor(position.windowColor) ? position.windowColor : defaults.windowColor,
     handleType: isHandleType(position.handleType) ? position.handleType : defaults.handleType,
     handleColor: isHandleColor(position.handleColor) ? position.handleColor : defaults.handleColor,
@@ -433,6 +444,14 @@ export const CalculatorPage = () => {
   const [positions, setPositions] = useState<CalculatorPosition[]>([]);
   const [positionId, setPositionId] = useState(requestedPositionId ?? 1);
   const [draft, setDraft] = useState<DraftState>(() => createDefaultDraft());
+  const [dimensionInput, setDimensionInput] = useState<DimensionInputState>(() => ({
+    width: '1300',
+    height: '1400',
+  }));
+  const [dimensionError, setDimensionError] = useState<DimensionErrorState>({
+    width: null,
+    height: null,
+  });
   const [isOptionDialogOpen, setOptionDialogOpen] = useState(false);
   const [editingOptionId, setEditingOptionId] = useState<number | null>(null);
   const [optionForm, setOptionForm] = useState<OptionFormState>(() => createDefaultOptionForm());
@@ -446,10 +465,19 @@ export const CalculatorPage = () => {
     const nextPositionId =
       requestedPositionId ?? (storedPositions.length > 0 ? Math.max(...storedPositions.map((item) => item.id)) + 1 : 1);
     const currentPosition = storedPositions.find((item) => item.id === nextPositionId);
+    const nextDraft = createDraftFromPosition(currentPosition);
 
     setPositions(storedPositions);
     setPositionId(nextPositionId);
-    setDraft(createDraftFromPosition(currentPosition));
+    setDraft(nextDraft);
+    setDimensionInput({
+      width: String(nextDraft.width),
+      height: String(nextDraft.height),
+    });
+    setDimensionError({
+      width: null,
+      height: null,
+    });
   }, [location.key, requestedPositionId, state?.resetPositions]);
 
   useEffect(() => {
@@ -472,7 +500,6 @@ export const CalculatorPage = () => {
   const currentProfile = profileCatalog.find((item) => item.id === draft.profileId) ?? profileCatalog[2];
   const currentPackage = packageOptions.find((item) => item.id === draft.packageType) ?? packageOptions[1];
   const currentOpening = getOpeningTypeById(draft.openingType);
-  const currentWindowColor = windowColorOptions.find((item) => item.id === draft.windowColor) ?? windowColorOptions[0];
   const currentHandleColor = handleColorOptions.find((item) => item.id === draft.handleColor) ?? handleColorOptions[0];
   const mullionCount = getMullionCountByOpeningType(draft.openingType);
   const mullionAxisSize = getMullionAxisSize(draft.width, draft.height, draft.mullionOrientation);
@@ -504,26 +531,31 @@ export const CalculatorPage = () => {
   const mullionSecondPartLabel = draft.mullionOrientation === 'vertical' ? 'Правая часть, мм' : 'Верхняя часть, мм';
   const mullionFromEdgeLabel = draft.mullionOrientation === 'vertical' ? 'от левого края' : 'от нижнего края';
 
-  const totalPrice = useMemo(() => {
-    const area = (draft.width * draft.height) / 1_000_000;
-    const sealExtra = sealColorOptions.find((item) => item.id === draft.sealColor)?.extra ?? 0;
-    const drainageExtra = drainageOptions.find((item) => item.id === draft.drainage)?.extra ?? 0;
-    const windowColorExtra = windowColorOptions.find((item) => item.id === draft.windowColor)?.extra ?? 0;
-    const handleTypeExtra = handleTypeOptions.find((item) => item.id === draft.handleType)?.extra ?? 0;
-    const handleColorExtra = handleColorOptions.find((item) => item.id === draft.handleColor)?.extra ?? 0;
-    const optionPrice = draft.additionalOptions.reduce((total, option) => total + getOptionPrice(option), 0);
+  const calculateDraftPrice = (draftState: DraftState): number => {
+    const area = (draftState.width * draftState.height) / 1_000_000;
+    const profile = profileCatalog.find((item) => item.id === draftState.profileId) ?? profileCatalog[2];
+    const opening = getOpeningTypeById(draftState.openingType);
+    const packageOption = packageOptions.find((item) => item.id === draftState.packageType) ?? packageOptions[1];
+    const sealExtra = sealColorOptions.find((item) => item.id === draftState.sealColor)?.extra ?? 0;
+    const drainageExtra = drainageOptions.find((item) => item.id === draftState.drainage)?.extra ?? 0;
+    const windowColorExtra = windowColorOptions.find((item) => item.id === draftState.windowColor)?.extra ?? 0;
+    const handleTypeExtra = handleTypeOptions.find((item) => item.id === draftState.handleType)?.extra ?? 0;
+    const handleColorExtra = handleColorOptions.find((item) => item.id === draftState.handleColor)?.extra ?? 0;
+    const optionPrice = draftState.additionalOptions.reduce((total, option) => total + getOptionPrice(option), 0);
 
     return Math.round(
-      (area * currentProfile.pricePerSquare * currentOpening.factor +
+      (area * profile.pricePerSquare * opening.factor +
         sealExtra +
         drainageExtra +
         windowColorExtra +
         handleTypeExtra +
         handleColorExtra +
         optionPrice) *
-        currentPackage.factor,
+        packageOption.factor,
     );
-  }, [currentOpening.factor, currentPackage.factor, currentProfile.pricePerSquare, draft]);
+  };
+
+  const totalPrice = useMemo(() => calculateDraftPrice(draft), [draft]);
   const openAddOptionDialog = (): void => {
     setEditingOptionId(null);
     setOptionForm(createDefaultOptionForm());
@@ -570,6 +602,84 @@ export const CalculatorPage = () => {
     if (editingOptionId === optionId) {
       setOptionDialogOpen(false);
     }
+  };
+
+  const validateDimensionInput = (rawValue: string): { value: number | null; error: string | null } => {
+    if (rawValue.length === 0) {
+      return { value: null, error: 'Введите значение' };
+    }
+
+    const parsedValue = Number.parseInt(rawValue, 10);
+
+    if (!Number.isFinite(parsedValue)) {
+      return { value: null, error: 'Введите значение' };
+    }
+
+    if (parsedValue < DIMENSION_MIN) {
+      return { value: null, error: `Минимум ${DIMENSION_MIN} мм` };
+    }
+
+    if (parsedValue > DIMENSION_MAX) {
+      return { value: null, error: `Максимум ${DIMENSION_MAX} мм` };
+    }
+
+    return { value: parsedValue, error: null };
+  };
+
+  const applyDimensionValue = (field: DimensionField, nextValue: number): void => {
+    setDraft((value) => ({
+      ...value,
+      [field]: nextValue,
+    }));
+    setDimensionInput((value) => ({
+      ...value,
+      [field]: String(nextValue),
+    }));
+    setDimensionError((value) => ({
+      ...value,
+      [field]: null,
+    }));
+  };
+
+  const handleDimensionInputChange = (field: DimensionField, rawValue: string): void => {
+    const digitsOnly = rawValue.replace(/\D/g, '');
+
+    setDimensionInput((value) => ({
+      ...value,
+      [field]: digitsOnly,
+    }));
+    setDimensionError((value) => ({
+      ...value,
+      [field]: null,
+    }));
+  };
+
+  const handleDimensionInputKeyDown = (field: DimensionField, event: ReactKeyboardEvent<HTMLInputElement>): void => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+
+    const validation = validateDimensionInput(dimensionInput[field]);
+
+    if (validation.error || validation.value === null) {
+      setDimensionError((value) => ({
+        ...value,
+        [field]: validation.error,
+      }));
+      return;
+    }
+
+    applyDimensionValue(field, validation.value);
+  };
+
+  const adjustDimension = (field: DimensionField, delta: number): void => {
+    const inputValue = Number.parseInt(dimensionInput[field], 10);
+    const fallbackValue = field === 'width' ? draft.width : draft.height;
+    const baseValue = Number.isFinite(inputValue) ? inputValue : fallbackValue;
+
+    applyDimensionValue(field, clampDimension(baseValue + delta));
   };
 
   const setMullionOffset = (mullionIndex: number, nextOffset: number): void => {
@@ -654,25 +764,46 @@ export const CalculatorPage = () => {
   };
 
   const save = (): void => {
+    const widthValidation = validateDimensionInput(dimensionInput.width);
+    const heightValidation = validateDimensionInput(dimensionInput.height);
+
+    setDimensionError({
+      width: widthValidation.error,
+      height: heightValidation.error,
+    });
+
+    if (widthValidation.value === null || heightValidation.value === null) {
+      return;
+    }
+
+    const nextDraft: DraftState = {
+      ...draft,
+      width: widthValidation.value,
+      height: heightValidation.value,
+    };
+    const nextMullionCount = getMullionCountByOpeningType(nextDraft.openingType);
+    const nextMullionAxisSize = getMullionAxisSize(nextDraft.width, nextDraft.height, nextDraft.mullionOrientation);
+    const nextMullionOffsets = sanitizeMullionOffsets(nextDraft.mullionOffsets, nextMullionCount, nextMullionAxisSize);
+    const nextPrice = calculateDraftPrice(nextDraft);
     const existingPosition = positions.find((item) => item.id === positionId);
     const nextPosition: CalculatorPosition = {
       ...(existingPosition ?? { id: positionId }),
       id: positionId,
-      width: draft.width,
-      height: draft.height,
-      price: totalPrice,
-      packageType: draft.packageType,
-      openingType: draft.openingType,
-      profileId: draft.profileId,
-      drainage: draft.drainage,
-      sealColor: draft.sealColor,
-      windowColorSide: draft.windowColorSide,
-      windowColor: draft.windowColor,
-      handleType: draft.handleType,
-      handleColor: draft.handleColor,
-      mullionOrientation: draft.mullionOrientation,
-      mullionOffsets: normalizedMullionOffsets,
-      additionalOptions: draft.additionalOptions,
+      width: nextDraft.width,
+      height: nextDraft.height,
+      price: nextPrice,
+      packageType: nextDraft.packageType,
+      openingType: nextDraft.openingType,
+      profileId: nextDraft.profileId,
+      drainage: nextDraft.drainage,
+      sealColor: nextDraft.sealColor,
+      windowColorSide: nextDraft.windowColorSide,
+      windowColor: nextDraft.windowColor,
+      handleType: nextDraft.handleType,
+      handleColor: nextDraft.handleColor,
+      mullionOrientation: nextDraft.mullionOrientation,
+      mullionOffsets: nextMullionOffsets,
+      additionalOptions: nextDraft.additionalOptions,
     };
     const nextPositions = [...positions.filter((item) => item.id !== positionId), nextPosition].sort((a, b) => a.id - b.id);
 
@@ -744,66 +875,74 @@ export const CalculatorPage = () => {
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDraft((value) => ({ ...value, width: clampDimension(value.width - 50) }))}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <label className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-brand-400 bg-slate-50 px-3">
-                  <input
-                    value={draft.width}
-                    inputMode="numeric"
-                    onChange={(event) =>
-                      setDraft((value) => ({
-                        ...value,
-                        width: clampDimension(Number.parseInt(event.target.value.replace(/\D/g, '') || '500', 10)),
-                      }))
-                    }
-                    className="w-full border-none bg-transparent text-center text-[34px] font-extrabold leading-none text-ink-800 outline-none"
-                  />
-                  <span className="text-sm font-semibold text-slate-500">мм</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setDraft((value) => ({ ...value, width: clampDimension(value.width + 50) }))}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => adjustDimension('width', -50)}
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <label
+                    className={cn(
+                      'flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border bg-slate-50 px-3',
+                      dimensionError.width ? 'border-error' : 'border-brand-400',
+                    )}
+                  >
+                    <input
+                      value={dimensionInput.width}
+                      inputMode="numeric"
+                      onChange={(event) => handleDimensionInputChange('width', event.target.value)}
+                      onKeyDown={(event) => handleDimensionInputKeyDown('width', event)}
+                      className="w-full border-none bg-transparent text-center text-[34px] font-extrabold leading-none text-ink-800 outline-none"
+                    />
+                    <span className="text-sm font-semibold text-slate-500">мм</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => adjustDimension('width', 50)}
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+                {dimensionError.width ? <p className="text-xs text-error">{dimensionError.width}</p> : null}
               </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDraft((value) => ({ ...value, height: clampDimension(value.height - 50) }))}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <label className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3">
-                  <input
-                    value={draft.height}
-                    inputMode="numeric"
-                    onChange={(event) =>
-                      setDraft((value) => ({
-                        ...value,
-                        height: clampDimension(Number.parseInt(event.target.value.replace(/\D/g, '') || '500', 10)),
-                      }))
-                    }
-                    className="w-full border-none bg-transparent text-center text-[34px] font-extrabold leading-none text-ink-800 outline-none"
-                  />
-                  <span className="text-sm font-semibold text-slate-500">мм</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setDraft((value) => ({ ...value, height: clampDimension(value.height + 50) }))}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => adjustDimension('height', -50)}
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <label
+                    className={cn(
+                      'flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border bg-slate-50 px-3',
+                      dimensionError.height ? 'border-error' : 'border-slate-300',
+                    )}
+                  >
+                    <input
+                      value={dimensionInput.height}
+                      inputMode="numeric"
+                      onChange={(event) => handleDimensionInputChange('height', event.target.value)}
+                      onKeyDown={(event) => handleDimensionInputKeyDown('height', event)}
+                      className="w-full border-none bg-transparent text-center text-[34px] font-extrabold leading-none text-ink-800 outline-none"
+                    />
+                    <span className="text-sm font-semibold text-slate-500">мм</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => adjustDimension('height', 50)}
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+                {dimensionError.height ? <p className="text-xs text-error">{dimensionError.height}</p> : null}
               </div>
             </div>
 
@@ -904,7 +1043,7 @@ export const CalculatorPage = () => {
 
             {mullionCount > 0 ? (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                {/* <div className="grid grid-cols-2 gap-2">
                   {mullionOrientationOptions.map((item) => (
                     <ChoiceButton
                       key={item.id}
@@ -916,7 +1055,7 @@ export const CalculatorPage = () => {
                       {item.label}
                     </ChoiceButton>
                   ))}
-                </div>
+                </div> */}
 
 
 
@@ -974,11 +1113,11 @@ export const CalculatorPage = () => {
                           onPointerUp={handleMullionPointerEnd}
                           onPointerCancel={handleMullionPointerEnd}
                           className={cn(
-                            'absolute z-20 rounded bg-brand-600 shadow-sm outline-none transition-colors',
+                            'absolute z-20 shadow-sm outline-none bg-slate-100 border border-cyan-800 transition-colors',
                             draft.mullionOrientation === 'vertical'
-                              ? 'bottom-2 top-2 w-3 -translate-x-1/2 cursor-col-resize'
+                              ? 'bottom-3 top-3 w-3 -translate-x-1/2 cursor-col-resize'
                               : 'left-2 right-2 h-3 translate-y-1/2 cursor-row-resize',
-                            isActive ? 'bg-brand-600' : 'hover:bg-brand-600',
+
                           )}
                           style={
                             draft.mullionOrientation === 'vertical'
@@ -986,7 +1125,11 @@ export const CalculatorPage = () => {
                               : { bottom: `${offsetPercent}%`, touchAction: 'none' }
                           }
                         >
-                          <span className="sr-only">Импост {mullionIndex}</span>
+                          <span className='flex flex-col gap-2  absolute  left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2'>
+                            <span className="h-2 w-2 rounded-full bg-slate-200"></span>
+                            <span className="h-2 w-2 rounded-full bg-slate-200"></span>
+                            <span className="h-2 w-2 rounded-full bg-slate-200"></span>
+                          </span>
                         </button>
                       );
                     })}
@@ -1060,30 +1203,41 @@ export const CalculatorPage = () => {
             </div>
 
             <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-slate-100 p-1">
-              {windowColorSideOptions.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setDraft((value) => ({ ...value, windowColorSide: item.id }))}
-                  className={cn(
-                    'h-9 rounded-lg text-sm font-semibold transition-colors',
-                    draft.windowColorSide === item.id
-                      ? 'text-ink-800 shadow-sm'
-                      : 'text-slate-500 hover:text-ink-700',
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+              {windowColorSideOptions.map((item) => {
+                const isAvailable = item.id === 'solid';
+                const isActive = draft.windowColorSide === item.id;
 
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={!isAvailable}
+                    onClick={() => {
+                      if (isAvailable) {
+                        setDraft((value) => ({ ...value, windowColorSide: item.id }));
+                      }
+                    }}
+                    className={cn(
+                      'h-9 rounded-lg text-sm font-semibold transition-colors disabled:cursor-not-allowed',
+                      isActive
+                        ? 'text-ink-800 shadow-sm'
+                        : isAvailable
+                          ? 'text-slate-500 hover:text-ink-700'
+                          : 'text-slate-400 opacity-50',
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
             <div className="grid grid-cols-3 gap-3">
               {windowColorOptions.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setDraft((value) => ({ ...value, windowColor: item.id }))}
-                  className="group text-left"
+                  className="group text-center"
                 >
                   <span
                     className={cn(
@@ -1228,7 +1382,7 @@ export const CalculatorPage = () => {
         </section>
 
         <footer className="fixed bottom-0 left-1/2 z-50 w-[calc(100%-1rem)] max-w-[560px] -translate-x-1/2 border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-panel backdrop-blur-sm">
-          <div className="mb-3 flex items-end justify-between gap-2">
+          {/* <div className="mb-3 flex items-end justify-between gap-2">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Стоимость</p>
               <p className="text-[38px] font-extrabold leading-none tracking-tight text-ink-800">
@@ -1238,7 +1392,7 @@ export const CalculatorPage = () => {
             <span className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-600">
               {currentWindowColor.label}
             </span>
-          </div>
+          </div> */}
           <Button className="h-12 text-base" onClick={save}>
             Сохранить позицию
             <ChevronRight className="h-4 w-4" />
@@ -1335,9 +1489,7 @@ export const CalculatorPage = () => {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                  Для отлива выбор материала отключен.
-                </div>
+                <></>
               )}
 
               <div className="flex gap-3">
@@ -1361,4 +1513,5 @@ export const CalculatorPage = () => {
     </div>
   );
 };
+
 

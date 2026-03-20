@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Bell, CalendarDays, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
 import { getOrderStatusUi } from '@/features/orders/model/order-status';
@@ -25,10 +25,15 @@ const filterOptions: FilterOption[] = [
 
 const normalizeSearchValue = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ');
 const normalizeDigits = (value: string): string => value.replace(/\D/g, '');
+const emptyDateLabel = 'Не назначена';
+
+const formatDateLabel = (value: string): string => value.trim() || emptyDateLabel;
 
 const OrderCard = ({ order }: { order: OrderSummary }) => {
   const status = getOrderStatusUi(order.status);
   const amount = order.amount === null ? '—' : formatCurrency(order.amount);
+  const productItems = order.items.filter((item) => item.trim().length > 0);
+  const shouldHideMeta = order.subtitle.trim() === 'Ожидание расчета' && order.note.trim() === 'Оценка';
 
   return (
     <Link
@@ -51,23 +56,50 @@ const OrderCard = ({ order }: { order: OrderSummary }) => {
 
       <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
-          <p className="font-semibold uppercase tracking-wide text-slate-400">Дата изготовления</p>
-          <p className="mt-1 font-bold text-ink-700">{order.leadTime}</p>
+          <p className="font-semibold uppercase tracking-wide text-slate-400">Дата замера</p>
+          <p className="mt-1 font-bold text-ink-700">{formatDateLabel(order.measurementDate)}</p>
         </div>
         <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
+          <p className="font-semibold uppercase tracking-wide text-slate-400">Дата изготовления</p>
+          <p className="mt-1 font-bold text-ink-700">{formatDateLabel(order.productionDate)}</p>
+        </div>
+        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 col-span-full">
+          <p className="font-semibold uppercase tracking-wide text-slate-400">Дата монтажа</p>
+          <p className="mt-1 font-bold text-ink-700">{formatDateLabel(order.installationDate)}</p>
+        </div>
+        {/* <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
           <p className="font-semibold uppercase tracking-wide text-slate-400">Код / маржа</p>
           <p className="mt-1 font-bold text-ink-700">
             {order.code} · {order.margin}
           </p>
-        </div>
+        </div> */}
+      </div>
+
+      <div className="mb-3 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs">
+        <p className="font-semibold uppercase tracking-wide text-slate-400">Список товаров</p>
+        {productItems.length > 0 ? (
+          <>
+            <ul className="mt-2 space-y-1 text-sm font-medium text-ink-700">
+              {productItems.map((item, index) => (
+                <li key={`${order.id}-product-${index}`} className="truncate">
+                  • {item}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="mt-1 font-medium text-slate-500">Товары не добавлены</p>
+        )}
       </div>
 
       <div className="flex items-end justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-slate-500">{order.subtitle}</p>
-          <p className="mt-1 text-xs text-slate-400">{order.note}</p>
-        </div>
-        <div className="text-right">
+        {!shouldHideMeta ? (
+          <div>
+            <p className="text-sm font-medium text-slate-500">{order.subtitle}</p>
+            <p className="mt-1 text-xs text-slate-400">{order.note}</p>
+          </div>
+        ) : null}
+        <div className="ml-auto text-right">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             {order.amount === null ? 'Оценка' : 'Сумма'}
           </p>
@@ -131,22 +163,6 @@ export const OrdersPage = () => {
         <section className="relative min-h-[calc(100vh-1.5rem)] flex-1 px-4 pb-36 pt-5">
           <header className="mb-4 flex items-center justify-between">
             <h1 className="text-[42px] font-extrabold leading-none tracking-tight text-ink-800">Заказы</h1>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-brand-500 transition-colors hover:bg-brand-50"
-                aria-label="Календарь"
-              >
-                <CalendarDays className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-brand-500 transition-colors hover:bg-brand-50"
-                aria-label="Уведомления"
-              >
-                <Bell className="h-4 w-4" />
-              </button>
-            </div>
           </header>
 
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">
@@ -158,13 +174,6 @@ export const OrdersPage = () => {
               placeholder="Поиск по номеру заказа или имени клиента..."
               className="h-11 flex-1 border-none bg-transparent text-sm text-ink-700 outline-none placeholder:text-slate-400"
             />
-            <button
-              type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-              aria-label="Фильтры"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-            </button>
           </div>
 
           <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -179,15 +188,17 @@ export const OrdersPage = () => {
                   className={cn(
                     'inline-flex items-center gap-2 rounded-full whitespace-nowrap border px-4 py-2 text-sm font-semibold transition-colors',
                     isActive
-                      ? 'border-brand-700 bg-brand-50 text-ink-700'
-                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100',
+                      ? 'border-brand-400 bg-brand-100 text-ink-800'
+                      : 'border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-ink-700',
                   )}
                 >
                   <span>{filterOption.label}</span>
                   <span
                     className={cn(
-                      'inline-flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold',
-                      isActive ? 'text-ink-800' : 'bg-slate-100 text-slate-500',
+                      'inline-flex min-w-6 items-center justify-center rounded-full border px-1.5 py-0.5 text-[11px] font-bold',
+                      isActive
+                        ? 'border-brand-300 bg-brand-50 text-ink-800'
+                        : 'border-slate-300 bg-slate-50 text-slate-500',
                     )}
                   >
                     {statusCounts[filterOption.id]}

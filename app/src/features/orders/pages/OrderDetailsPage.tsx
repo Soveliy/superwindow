@@ -28,6 +28,7 @@ import { ordersStorage, type OrderCustomerForm } from '@/features/orders/model/o
 import { readAvailableProductionDates } from '@/features/settings/model/production-dates.storage';
 import { formatCurrency } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/Button';
+import { DatePickerField } from '@/shared/ui/DatePickerField';
 import { TextField } from '@/shared/ui/TextField';
 
 interface OrderDetailsLocationState {
@@ -313,11 +314,6 @@ export const OrderDetailsPage = () => {
   const measurementRangeLabel = form.measurementDate ? formatIsoDateRange(form.measurementDate) : '';
   const installationRangeLabel = form.installationDate ? formatIsoDateRange(form.installationDate) : '';
   const productionDateLabel = form.productionDate ? formatIsoDate(form.productionDate) : '';
-  const installationDateHint =
-    installationDateMin && installationDateMax
-      ? `${formatIsoDate(installationDateMin)} - ${formatIsoDate(installationDateMax)}`
-      : '';
-  const productionDatesHint = availableProductionDates.map((date) => formatIsoDate(date)).filter(Boolean).join(', ');
 
   const summaryLeadTime = form.productionDate.trim()
     ? productionDateLabel || order?.leadTime || orderDetailsMock.leadTime
@@ -371,18 +367,18 @@ export const OrderDetailsPage = () => {
     setForm((state) => ({ ...state, phone: formatPhoneInput(event.target.value) }));
   };
 
-  const handleMeasurementDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setForm((state) => ({ ...state, measurementDate: event.target.value }));
+  const handleMeasurementDateChange = (nextValue: string) => {
+    setForm((state) => ({ ...state, measurementDate: nextValue }));
   };
 
-  const handleProductionDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextValue = normalizeDateByOptions(event.target.value, availableProductionDates);
-    setForm((state) => ({ ...state, productionDate: nextValue }));
+  const handleProductionDateChange = (nextValue: string) => {
+    const normalizedValue = normalizeDateByOptions(nextValue, availableProductionDates);
+    setForm((state) => ({ ...state, productionDate: normalizedValue }));
   };
 
-  const handleInstallationDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextValue = normalizeDateByOptions(event.target.value, availableInstallationDates);
-    setForm((state) => ({ ...state, installationDate: nextValue }));
+  const handleInstallationDateChange = (nextValue: string) => {
+    const normalizedValue = normalizeDateByOptions(nextValue, availableInstallationDates);
+    setForm((state) => ({ ...state, installationDate: normalizedValue }));
   };
 
   const copyPosition = (positionId: number): void => {
@@ -576,13 +572,12 @@ export const OrderDetailsPage = () => {
 
                   <div className="grid gap-3 md:grid-cols-2">
                     <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                      <TextField
+                      <DatePickerField
                         label="Дата замера"
-                        type="date"
                         readOnly={isCustomerFieldsReadonly}
                         value={form.measurementDate}
                         onChange={handleMeasurementDateChange}
-                        // rightSlot={<CalendarDays className="h-4 w-4 text-slate-400" />}
+                        placeholder="Выберите дату замера"
                       />
                       <p className="mt-2 text-xs text-slate-500">
                         {measurementRangeLabel ? `Диапазон: ${measurementRangeLabel}` : 'Выберите дату замера'}
@@ -590,55 +585,37 @@ export const OrderDetailsPage = () => {
                     </article>
 
                     <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                      <TextField
+                      <DatePickerField
                         label="Дата изготовления"
-                        type="date"
-                        list="production-date-options"
-                        min={productionDateMin || undefined}
-                        max={productionDateMax || undefined}
                         readOnly={isCustomerFieldsReadonly}
                         value={form.productionDate}
                         onChange={handleProductionDateChange}
-                        // rightSlot={<CalendarDays className="h-4 w-4 text-slate-400" />}
+                        minDate={productionDateMin || undefined}
+                        maxDate={productionDateMax || undefined}
+                        allowedDates={availableProductionDates}
+                        placeholder="Выберите дату изготовления"
                       />
-                      <datalist id="production-date-options">
-                        {availableProductionDates.map((date) => (
-                          <option key={date} value={date} />
-                        ))}
-                      </datalist>
                       <p className="mt-2 text-xs text-slate-500">
                         {productionDateLabel ? `Выбрано: ${productionDateLabel}` : 'Выберите дату изготовления'}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {productionDatesHint ? `Доступные даты: ${productionDatesHint}` : 'Доступные даты не настроены'}
-                      </p>
+
                     </article>
 
                     <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 col-span-full">
-                      <TextField
+                      <DatePickerField
                         label="Дата монтажа"
-                        type="date"
-                        list="installation-date-options"
-                        min={installationDateMin || undefined}
-                        max={installationDateMax || undefined}
                         readOnly={isCustomerFieldsReadonly}
                         value={form.installationDate}
                         onChange={handleInstallationDateChange}
-                        // rightSlot={<CalendarDays className="h-4 w-4 text-slate-400" />}
+                        minDate={installationDateMin || undefined}
+                        maxDate={installationDateMax || undefined}
+                        allowedDates={availableInstallationDates}
+                        placeholder="Выберите дату монтажа"
                       />
-                      <datalist id="installation-date-options">
-                        {availableInstallationDates.map((date) => (
-                          <option key={date} value={date} />
-                        ))}
-                      </datalist>
                       <p className="mt-2 text-xs text-slate-500">
                         {installationRangeLabel ? `Диапазон: ${installationRangeLabel}` : 'Выберите дату монтажа'}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {installationDateHint
-                          ? `Временный диапазон доступных дат: ${installationDateHint}`
-                          : 'Список доступных дат монтажа формируется от текущей даты'}
-                      </p>
+
                     </article>
                   </div>
                 </div>
@@ -803,20 +780,13 @@ export const OrderDetailsPage = () => {
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Срок</p>
-                <p className="mt-1 text-sm font-bold text-ink-800">{summaryLeadTime}</p>
-              </div>
+
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Код</p>
                 <p className="mt-1 text-sm font-bold text-ink-800">{summaryCode}</p>
               </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Маржа</p>
-                <p className="mt-1 text-sm font-bold text-ink-800">{summaryMargin}</p>
-              </div>
-            </div>
+
+
 
             <div className="mt-4 flex flex-col gap-4 border-t border-slate-200 pt-4">
               <div>

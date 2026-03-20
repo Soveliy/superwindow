@@ -98,3 +98,37 @@
     @apply text-ink-800;
   }
 }
+
+@layer components {
+  .superwindow-calendar {
+    @apply w-full border-0 bg-transparent text-ink-700;
+  }
+
+  .superwindow-calendar .react-calendar__navigation {
+    @apply mb-2 flex items-center gap-1;
+  }
+
+  .superwindow-calendar .react-calendar__navigation button {
+    @apply min-h-9 rounded-md px-2 text-sm font-semibold text-ink-700 hover:bg-slate-100;
+  }
+
+  .superwindow-calendar .react-calendar__month-view__weekdays {
+    @apply mb-1 text-[11px] uppercase tracking-wide text-slate-500;
+  }
+
+  .superwindow-calendar .react-calendar__month-view__weekdays__weekday abbr {
+    @apply no-underline;
+  }
+
+  .superwindow-calendar .react-calendar__tile {
+    @apply rounded-md py-2 text-sm font-medium text-ink-700 hover:bg-slate-100;
+  }
+
+  .superwindow-calendar .react-calendar__tile--active {
+    @apply bg-brand-500 text-ink-800;
+  }
+
+  .superwindow-calendar .react-calendar__tile:disabled {
+    @apply cursor-not-allowed text-slate-500 opacity-35;
+  }
+}

@@ -4,6 +4,7 @@ import { BrowserRouter, HashRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from '@/app/App';
 import '@/shared/styles/index.css';
+import 'react-calendar/dist/Calendar.css';
 import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 
 registerSW({

@@ -207,6 +207,34 @@ const normalizeDraftPositions = (positions: CalculatorPosition[] | undefined): C
 
 const clonePositions = (positions: CalculatorPosition[]): CalculatorPosition[] => normalizeDraftPositions(positions);
 
+const openingTypeLabels: Record<string, string> = {
+  single: 'Одностворчатое окно',
+  single_turn: 'Одностворчатое окно (поворотное)',
+  double: 'Двухстворчатое окно',
+  double_left_active: 'Двухстворчатое окно (активная левая)',
+  double_right_active: 'Двухстворчатое окно (активная правая)',
+  double_dual_active: 'Двухстворчатое окно (две активные)',
+  triple: 'Трехстворчатое окно',
+  triple_dual_active: 'Трехстворчатое окно (две активные)',
+  triple_full_active: 'Трехстворчатое окно (три активные)',
+  balcony: 'Балконная дверь',
+  balcony_left_door: 'Балконная дверь (створка слева)',
+  balcony_right_door: 'Балконная дверь (створка справа)',
+};
+
+const formatPositionSummary = (position: CalculatorPosition, index: number): string => {
+  const baseLabel =
+    (position.openingType ? openingTypeLabels[position.openingType] : undefined) ?? `Позиция ${position.id ?? index + 1}`;
+  const width = position.width ?? 0;
+  const height = position.height ?? 0;
+
+  if (width > 0 && height > 0) {
+    return `${baseLabel} (${width} x ${height} мм)`;
+  }
+
+  return baseLabel;
+};
+
 const cloneServices = (services: OrderService[] | undefined): OrderService[] => {
   if (!Array.isArray(services)) {
     return [];
@@ -374,6 +402,31 @@ const formatDateRange = (startDate: string): string => {
   return formattedEndDate ? `${formattedStartDate} - ${formattedEndDate}` : formattedStartDate;
 };
 
+const resolveDraftDate = (dateValue: string, fallback: string): string => {
+  const formattedDate = formatCalendarDate(dateValue.trim());
+
+  if (formattedDate) {
+    return formattedDate;
+  }
+
+  return fallback;
+};
+
+const resolveDraftItems = (draft: StoredOrderDraft, baseOrder?: OrderSummary): string[] => {
+  const positions = normalizeDraftPositions(draft.positions);
+
+  if (positions.length > 0) {
+    return positions.map(formatPositionSummary);
+  }
+
+  if (baseOrder && baseOrder.items.length > 0) {
+    return baseOrder.items;
+  }
+
+  const subtitle = baseOrder?.subtitle.trim();
+  return subtitle ? [subtitle] : [];
+};
+
 const resolveDraftLeadTime = (draft: StoredOrderDraft, baseOrder?: OrderSummary): string => {
   const productionDate = draft.form.productionDate.trim();
   const installationDate = draft.form.installationDate.trim();
@@ -427,6 +480,10 @@ const mapDraftToSummary = (draft: StoredOrderDraft): OrderSummary => {
     leadTime: resolveDraftLeadTime(draft, baseOrder),
     code: resolveDraftCode(draft, baseOrder),
     margin: resolveDraftMargin(draft, baseOrder),
+    measurementDate: resolveDraftDate(draft.form.measurementDate, baseOrder?.measurementDate ?? ''),
+    productionDate: resolveDraftDate(draft.form.productionDate, baseOrder?.productionDate ?? ''),
+    installationDate: resolveDraftDate(draft.form.installationDate, baseOrder?.installationDate ?? ''),
+    items: resolveDraftItems(draft, baseOrder),
   };
 };
 
