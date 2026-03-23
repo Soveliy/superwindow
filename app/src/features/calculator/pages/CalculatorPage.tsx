@@ -708,6 +708,48 @@ export const CalculatorPage = () => {
     });
   };
 
+  const normalizeNumericInput = (value: string): string => value.replace(/\D/g, '');
+
+  const commitMullionStartInput = (mullionIndex: number, input: HTMLInputElement, fallbackOffset: number): void => {
+    const digits = normalizeNumericInput(input.value);
+
+    if (!digits) {
+      input.value = String(fallbackOffset);
+      return;
+    }
+
+    const parsed = Number.parseInt(digits, 10);
+
+    if (!Number.isFinite(parsed)) {
+      input.value = String(fallbackOffset);
+      return;
+    }
+
+    setMullionOffset(mullionIndex, parsed);
+  };
+
+  const commitMullionReverseInput = (
+    mullionIndex: number,
+    input: HTMLInputElement,
+    fallbackReverseOffset: number,
+  ): void => {
+    const digits = normalizeNumericInput(input.value);
+
+    if (!digits) {
+      input.value = String(fallbackReverseOffset);
+      return;
+    }
+
+    const parsed = Number.parseInt(digits, 10);
+
+    if (!Number.isFinite(parsed)) {
+      input.value = String(fallbackReverseOffset);
+      return;
+    }
+
+    setMullionOffset(mullionIndex, mullionAxisSize - parsed);
+  };
+
   const updateMullionFromPoint = (event: ReactPointerEvent<HTMLButtonElement>, mullionIndex: number): void => {
     const container = mullionPreviewRef.current;
 
@@ -1152,12 +1194,28 @@ export const CalculatorPage = () => {
                                 {mullionFirstPartLabel}
                               </span>
                               <input
-                                value={offset}
+                                key={`mullion-${mullionIndex}-start-${offset}`}
+                                defaultValue={offset}
                                 inputMode="numeric"
                                 onChange={(event) => {
-                                  const digits = Number.parseInt(event.target.value.replace(/\D/g, ''), 10);
-                                  setMullionOffset(mullionIndex, Number.isFinite(digits) ? digits : offset);
+                                  const digits = normalizeNumericInput(event.target.value);
+                                  if (event.target.value !== digits) {
+                                    event.target.value = digits;
+                                  }
                                 }}
+                                onBlur={(event) => {
+                                  commitMullionStartInput(mullionIndex, event.currentTarget, offset);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key !== 'Enter') {
+                                    return;
+                                  }
+
+                                  event.preventDefault();
+                                  commitMullionStartInput(mullionIndex, event.currentTarget, offset);
+                                  event.currentTarget.blur();
+                                }}
+                                autoComplete="off"
                                 className="w-full border-none bg-transparent text-lg font-extrabold text-ink-800 outline-none"
                               />
                             </label>
@@ -1167,13 +1225,28 @@ export const CalculatorPage = () => {
                                 {mullionSecondPartLabel}
                               </span>
                               <input
-                                value={reverseOffset}
+                                key={`mullion-${mullionIndex}-reverse-${reverseOffset}-${mullionAxisSize}`}
+                                defaultValue={reverseOffset}
                                 inputMode="numeric"
                                 onChange={(event) => {
-                                  const digits = Number.parseInt(event.target.value.replace(/\D/g, ''), 10);
-                                  const nextReverseOffset = Number.isFinite(digits) ? digits : reverseOffset;
-                                  setMullionOffset(mullionIndex, mullionAxisSize - nextReverseOffset);
+                                  const digits = normalizeNumericInput(event.target.value);
+                                  if (event.target.value !== digits) {
+                                    event.target.value = digits;
+                                  }
                                 }}
+                                onBlur={(event) => {
+                                  commitMullionReverseInput(mullionIndex, event.currentTarget, reverseOffset);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key !== 'Enter') {
+                                    return;
+                                  }
+
+                                  event.preventDefault();
+                                  commitMullionReverseInput(mullionIndex, event.currentTarget, reverseOffset);
+                                  event.currentTarget.blur();
+                                }}
+                                autoComplete="off"
                                 className="w-full border-none bg-transparent text-lg font-extrabold text-ink-800 outline-none"
                               />
                             </label>
