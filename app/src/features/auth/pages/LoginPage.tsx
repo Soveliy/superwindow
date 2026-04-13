@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Grid2X2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { loginRequest } from '@/features/auth/api/login';
@@ -22,12 +22,6 @@ export const LoginPage = () => {
   const [serverError, setServerError] = useState<string | null>(null);
   const devAuthHint = getDevAuthHint();
   const loginImageSrc = `${import.meta.env.BASE_URL}login-image.jpg`;
-
-  useEffect(() => {
-    if (authStorage.hasSession()) {
-      navigate('/orders', { replace: true });
-    }
-  }, [navigate]);
 
   const handleLogin = async (values: LoginFormValues): Promise<void> => {
     setSubmitting(true);

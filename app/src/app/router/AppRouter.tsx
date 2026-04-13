@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from '@/app/router/ProtectedRoute';
 import { authStorage } from '@/features/auth/model/auth-storage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
@@ -8,15 +8,13 @@ import { OrdersPage } from '@/features/orders/pages/OrdersPage';
 import { PaymentPage } from '@/features/payment/pages/PaymentPage';
 import { SettingsPage } from '@/features/settings/pages/SettingsPage';
 
-const RootRedirect = () => (
-  <Navigate to={authStorage.hasSession() ? '/orders' : '/login'} replace />
-);
+const HomeRoute = () => (authStorage.hasSession() ? <OrdersPage /> : <LoginPage />);
 
 export const AppRouter = () => {
   return (
     <Routes>
-      <Route path="/" element={<RootRedirect />} />
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<HomeRoute />} />
+      <Route path="/login" element={<HomeRoute />} />
       <Route
         path="/orders"
         element={
@@ -65,7 +63,7 @@ export const AppRouter = () => {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<RootRedirect />} />
+      <Route path="*" element={<HomeRoute />} />
     </Routes>
   );
 };

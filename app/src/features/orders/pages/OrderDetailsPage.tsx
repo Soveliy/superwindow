@@ -25,6 +25,7 @@ import {
 import { getOrderStatusUi } from '@/features/orders/model/order-status';
 import { type DeliveryMode, orderDetailsMock, type OrderService } from '@/features/orders/model/orders.mock';
 import { ordersStorage, type OrderCustomerForm } from '@/features/orders/model/orders.storage';
+import { LOCAL_AJAX_PATHS, postLocalAjaxJson } from '@/shared/api/local-ajax';
 import { readAvailableProductionDates } from '@/features/settings/model/production-dates.storage';
 import { formatCurrency } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/Button';
@@ -425,23 +426,86 @@ export const OrderDetailsPage = () => {
   };
 
   const saveInstallationService = (): void => {
-    setServices((state) =>
-      upsertService(state, {
-        type: 'installation',
-        discount: parseMoneyInput(installationDiscountInput),
-      }),
-    );
+    const discount = parseMoneyInput(installationDiscountInput);
+    const nextService: OrderService = {
+      type: 'installation',
+      discount,
+    };
+    const nextServices = upsertService(services, nextService);
+    const nextServicesTotal = nextServices.reduce((total, service) => total + getServicePrice(service, totalArea), 0);
+    const nextOrderAmount = windowsTotal + nextServicesTotal;
+
+    void postLocalAjaxJson({
+      label: 'save-service-installation',
+      path: LOCAL_AJAX_PATHS.saveService,
+      payload: {
+        source: 'order-details',
+        action: 'save-service',
+        serviceType: 'installation',
+        orderId: orderId ?? null,
+        order: {
+          id: order?.id ?? orderId ?? null,
+          code: summaryCode,
+          customerName: form.fullName.trim(),
+          status: order?.status ?? 'new',
+          amount: nextOrderAmount,
+        },
+        form,
+        positions,
+        services: nextServices,
+        service: nextService,
+        pricing: {
+          basePricePerSquare: INSTALLATION_RATE_PER_SQUARE,
+          totalArea,
+          basePrice: Math.round(totalArea * INSTALLATION_RATE_PER_SQUARE),
+          finalPrice: Math.max(0, Math.round(totalArea * INSTALLATION_RATE_PER_SQUARE) - discount),
+        },
+        savedAt: new Date().toISOString(),
+      },
+    });
+
+    setServices(nextServices);
     closeServiceDialog();
   };
 
   const saveDeliveryService = (): void => {
-    setServices((state) =>
-      upsertService(state, {
-        type: 'delivery',
-        mode: deliveryModeInput,
-        price: deliveryModeInput === 'pickup' ? 0 : parseMoneyInput(deliveryPriceInput),
-      }),
-    );
+    const price = deliveryModeInput === 'pickup' ? 0 : parseMoneyInput(deliveryPriceInput);
+    const nextService: OrderService = {
+      type: 'delivery',
+      mode: deliveryModeInput,
+      price,
+    };
+    const nextServices = upsertService(services, nextService);
+    const nextServicesTotal = nextServices.reduce((total, service) => total + getServicePrice(service, totalArea), 0);
+    const nextOrderAmount = windowsTotal + nextServicesTotal;
+
+    void postLocalAjaxJson({
+      label: 'save-service-delivery',
+      path: LOCAL_AJAX_PATHS.saveService,
+      payload: {
+        source: 'order-details',
+        action: 'save-service',
+        serviceType: 'delivery',
+        orderId: orderId ?? null,
+        order: {
+          id: order?.id ?? orderId ?? null,
+          code: summaryCode,
+          customerName: form.fullName.trim(),
+          status: order?.status ?? 'new',
+          amount: nextOrderAmount,
+        },
+        form,
+        positions,
+        services: nextServices,
+        service: nextService,
+        pricing: {
+          finalPrice: price,
+        },
+        savedAt: new Date().toISOString(),
+      },
+    });
+
+    setServices(nextServices);
     closeServiceDialog();
   };
 

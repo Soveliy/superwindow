@@ -40,6 +40,7 @@ import {
   readCalculatorPositions,
   writeCalculatorPositions,
 } from '@/features/calculator/model/positions.storage';
+import { LOCAL_AJAX_PATHS, postLocalAjaxJson } from '@/shared/api/local-ajax';
 import { cn } from '@/shared/lib/cn';
 import { formatCurrency } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/Button';
@@ -800,7 +801,7 @@ export const CalculatorPage = () => {
     setActiveMullionId(null);
   };
 
-  const save = (): void => {
+  const save = async (): Promise<void> => {
     const widthValidation = validateDimensionInput(dimensionInput.width);
     const heightValidation = validateDimensionInput(dimensionInput.height);
 
@@ -845,6 +846,19 @@ export const CalculatorPage = () => {
     const nextPositions = [...positions.filter((item) => item.id !== positionId), nextPosition].sort((a, b) => a.id - b.id);
 
     writeCalculatorPositions(nextPositions);
+    await postLocalAjaxJson({
+      label: 'save-window',
+      path: LOCAL_AJAX_PATHS.saveWindow,
+      payload: {
+        source: 'calculator',
+        action: 'save-window',
+        positionId,
+        totalPrice: nextPrice,
+        draft: nextDraft,
+        position: nextPosition,
+        positions: nextPositions,
+      },
+    });
     navigate(returnTo, { state: { calculatorPositions: nextPositions } });
   };
 

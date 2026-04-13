@@ -11,7 +11,7 @@ registerSW({
   immediate: true,
 });
 
-const useHashRouter = import.meta.env.PROD && import.meta.env.BASE_URL !== '/';
+const useHashRouter = import.meta.env.VITE_USE_HASH_ROUTER === 'true';
 const routerBasename =
   !useHashRouter && import.meta.env.BASE_URL !== '/' ? import.meta.env.BASE_URL.replace(/\/$/, '') : undefined;
 

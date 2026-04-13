@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_DEV_AUTH_LOGIN?: string;
   readonly VITE_DEV_AUTH_PASSWORD?: string;
   readonly VITE_DEV_AUTH_DEALER_ID?: string;
+  readonly VITE_USE_HASH_ROUTER?: string;
 }
 
 interface ImportMeta {

@@ -42,6 +42,7 @@ jobs:
           VITE_DEV_AUTH_LOGIN: 'demo'
           VITE_DEV_AUTH_PASSWORD: 'demo123'
           VITE_DEV_AUTH_DEALER_ID: 'DEV-0001'
+          VITE_USE_HASH_ROUTER: 'true'
 
       - name: Add GitHub Pages fallback page
         run: |
