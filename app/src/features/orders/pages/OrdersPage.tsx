@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
+import { getRemoteOrders, type RemoteOrderListItem } from '@/features/orders/api/order-rest';
 import { getOrderStatusUi } from '@/features/orders/model/order-status';
-import { type OrderStatus, type OrderSummary } from '@/features/orders/model/orders.mock';
-import { ordersStorage } from '@/features/orders/model/orders.storage';
+import { type OrderStatus } from '@/features/orders/model/orders.mock';
 import { cn } from '@/shared/lib/cn';
 import { formatCurrency } from '@/shared/lib/format';
 
@@ -26,10 +26,17 @@ const filterOptions: FilterOption[] = [
 const normalizeSearchValue = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ');
 const normalizeDigits = (value: string): string => value.replace(/\D/g, '');
 const emptyDateLabel = 'Не назначена';
-
 const formatDateLabel = (value: string): string => value.trim() || emptyDateLabel;
 
-const OrderCard = ({ order }: { order: OrderSummary }) => {
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return 'Не удалось загрузить список заказов.';
+};
+
+const OrderCard = ({ order }: { order: RemoteOrderListItem }) => {
   const status = getOrderStatusUi(order.status);
   const amount = order.amount === null ? '—' : formatCurrency(order.amount);
   const productItems = order.items.filter((item) => item.trim().length > 0);
@@ -37,12 +44,12 @@ const OrderCard = ({ order }: { order: OrderSummary }) => {
 
   return (
     <Link
-      to={`/orders/${order.id}`}
+      to={`/orders/${order.routeId}`}
       className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-[30px] font-extrabold leading-none tracking-tight text-ink-800">{order.id}</p>
+          <p className="text-[30px] font-extrabold leading-none tracking-tight text-ink-800">{order.displayId}</p>
           <p className="mt-1 text-sm text-slate-500">
             {order.date} · {order.customer}
           </p>
@@ -67,26 +74,18 @@ const OrderCard = ({ order }: { order: OrderSummary }) => {
           <p className="font-semibold uppercase tracking-wide text-slate-400">Дата монтажа</p>
           <p className="mt-1 font-bold text-ink-700">{formatDateLabel(order.installationDate)}</p>
         </div>
-        {/* <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
-          <p className="font-semibold uppercase tracking-wide text-slate-400">Код / маржа</p>
-          <p className="mt-1 font-bold text-ink-700">
-            {order.code} · {order.margin}
-          </p>
-        </div> */}
       </div>
 
       <div className="mb-3 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs">
         <p className="font-semibold uppercase tracking-wide text-slate-400">Список товаров</p>
         {productItems.length > 0 ? (
-          <>
-            <ul className="mt-2 space-y-1 text-sm font-medium text-ink-700">
-              {productItems.map((item, index) => (
-                <li key={`${order.id}-product-${index}`} className="truncate">
-                  • {item}
-                </li>
-              ))}
-            </ul>
-          </>
+          <ul className="mt-2 space-y-1 text-sm font-medium text-ink-700">
+            {productItems.map((item, index) => (
+              <li key={`${order.routeId}-product-${index}`} className="truncate">
+                • {item}
+              </li>
+            ))}
+          </ul>
         ) : (
           <p className="mt-1 font-medium text-slate-500">Товары не добавлены</p>
         )}
@@ -114,10 +113,45 @@ export const OrdersPage = () => {
   const navigate = useNavigate();
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<OrdersFilter>('all');
+  const [orders, setOrders] = useState<RemoteOrderListItem[]>([]);
+  const [isLoadingOrders, setLoadingOrders] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
-  const orders = useMemo(() => ordersStorage.getOrders(), []);
   const normalizedQuery = normalizeSearchValue(orderSearchQuery);
   const normalizedDigitsQuery = normalizeDigits(normalizedQuery);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void (async () => {
+      try {
+        setLoadingOrders(true);
+        setOrdersError(null);
+        const nextOrders = await getRemoteOrders();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setOrders(nextOrders);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setOrdersError(getErrorMessage(error));
+        setOrders([]);
+      } finally {
+        if (!isCancelled) {
+          setLoadingOrders(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const statusCounts = useMemo(() => {
     const initialCounts: Record<OrdersFilter, number> = {
@@ -147,10 +181,10 @@ export const OrdersPage = () => {
           return true;
         }
 
-        const haystack = [order.id, order.code, order.customer]
+        const haystack = [order.displayId, order.code, order.customer]
           .map((item) => normalizeSearchValue(item))
           .join(' ');
-        const digitsHaystack = [order.id, order.code].map((item) => normalizeDigits(item)).join('');
+        const digitsHaystack = [order.displayId, order.code].map((item) => normalizeDigits(item)).join('');
 
         return haystack.includes(normalizedQuery) || (normalizedDigitsQuery ? digitsHaystack.includes(normalizedDigitsQuery) : false);
       }),
@@ -208,10 +242,18 @@ export const OrdersPage = () => {
             })}
           </div>
 
-          {filteredOrders.length > 0 ? (
+          {isLoadingOrders ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-slate-500">
+              Загружаем заказы...
+            </div>
+          ) : ordersError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-6 text-center text-red-600">
+              {ordersError}
+            </div>
+          ) : filteredOrders.length > 0 ? (
             <div className="space-y-3">
               {filteredOrders.map((order) => (
-                <OrderCard key={order.id} order={order} />
+                <OrderCard key={order.routeId} order={order} />
               ))}
             </div>
           ) : (

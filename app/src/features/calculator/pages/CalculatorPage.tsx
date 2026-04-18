@@ -83,6 +83,10 @@ type DimensionInputState = Record<DimensionField, string>;
 type DimensionErrorState = Record<DimensionField, string | null>;
 
 const withBase = (path: string): string => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+const extractOrderIdFromReturnPath = (value: string): string | null => {
+  const match = value.match(/^\/orders\/([^/?#]+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
 
 const profileCatalog = [
   { id: 'rula-58', label: 'Rula 58 мм', description: 'Базовый профиль', pricePerSquare: 3200 },
@@ -92,6 +96,18 @@ const profileCatalog = [
   { id: 'exprof-arctica', label: 'Exprof Arctica', description: 'Для холодных регионов', pricePerSquare: 4900 },
   { id: 'profecta-plus', label: 'Profecta Plus', description: 'Премиальная серия', pricePerSquare: 5600 },
 ] as const;
+
+const profileLabels = profileCatalog.reduce<Record<ProfileId, string>>((acc, item) => {
+  acc[item.id] = item.label;
+  return acc;
+}, {
+  'rula-58': 'Rula 58 мм',
+  'isotech-58': 'Isotech 58 мм',
+  'grunder-60': 'Grunder 60 мм',
+  'wintech-70': 'Wintech 70 мм',
+  'exprof-arctica': 'Exprof Arctica',
+  'profecta-plus': 'Profecta Plus',
+});
 
 const openingTypeOptions: Array<{ id: OpeningType; label: string; factor: number; image: string }> = [
   { id: 'single', label: 'Одностворчатое окно', factor: 1, image: withBase('/windows/9.svg') },
@@ -106,6 +122,24 @@ const openingTypeOptions: Array<{ id: OpeningType; label: string; factor: number
   { id: 'balcony', label: 'Балконная дверь', factor: 2.12, image: withBase('/windows/1.svg') },
 ];
 
+const openingTypeLabels = openingTypeOptions.reduce<Record<OpeningType, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, {
+  single: 'Одностворчатое окно',
+  single_turn: 'Одностворчатое окно (поворотное)',
+  double: 'Двухстворчатое окно',
+  double_left_active: 'Двухстворчатое окно (активная левая)',
+  double_right_active: 'Двухстворчатое окно (активная правая)',
+  double_dual_active: 'Двухстворчатое окно (две активные)',
+  triple: 'Трехстворчатое окно',
+  triple_dual_active: 'Трехстворчатое окно (две активные)',
+  triple_full_active: 'Трехстворчатое окно (три активные)',
+  balcony: 'Балконная дверь',
+  balcony_left_door: 'Балконная дверь (створка слева)',
+  balcony_right_door: 'Балконная дверь (створка справа)',
+});
+
 const packageOptions: Array<{ id: PackageType; label: string; factor: number }> = [
   { id: 'budget', label: 'Бюджет', factor: 1 },
   { id: 'standard', label: 'Стандарт', factor: 1.12 },
@@ -118,6 +152,11 @@ const packageIcons: Record<PackageType, LucideIcon> = {
   premium: Crown,
 };
 
+const packageLabels = packageOptions.reduce<Record<PackageType, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { budget: 'Бюджет', standard: 'Стандарт', premium: 'Премиум' });
+
 const sealColorOptions: Array<{ id: SealColor; label: string; extra: number }> = [
   { id: 'black', label: 'Черный', extra: 0 },
   { id: 'gray', label: 'Серый', extra: 180 },
@@ -129,6 +168,16 @@ const drainageOptions: Array<{ id: DrainageType; label: string; extra: number }>
   { id: 'none', label: 'Нет', extra: 0 },
   { id: 'street', label: 'С улицы', extra: 120 },
 ];
+
+const sealColorLabels = sealColorOptions.reduce<Record<SealColor, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { black: 'Черный', gray: 'Серый', white: 'Белый' });
+
+const drainageLabels = drainageOptions.reduce<Record<DrainageType, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { bottom: 'Снизу', none: 'Нет', street: 'С улицы' });
 
 const windowColorSideOptions: Array<{ id: WindowColorSide; label: string }> = [
   { id: 'outside', label: 'Снаружи' },
@@ -149,6 +198,23 @@ const windowColorOptions: Array<{
   { id: 'mahogany', label: 'Махагон', extra: 720, swatchClassName: 'bg-orange-800' },
   { id: 'silver', label: 'Серебро', extra: 740, swatchClassName: 'bg-gradient-to-br from-slate-100 via-slate-300 to-slate-600' },
 ];
+
+const windowColorSideLabels = windowColorSideOptions.reduce<Record<WindowColorSide, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { outside: 'Снаружи', inside: 'Внутри', solid: 'В массе' });
+
+const windowColorLabels = windowColorOptions.reduce<Record<WindowColor, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, {
+  white: 'Белый',
+  anthracite: 'Антрацит',
+  golden_oak: 'Золотой дуб',
+  dark_oak: 'Темный дуб',
+  mahogany: 'Махагон',
+  silver: 'Серебро',
+});
 
 const handleTypeOptions: Array<{ id: HandleType; label: string; extra: number }> = [
   { id: 'standard', label: 'Стандарт', extra: 0 },
@@ -172,6 +238,26 @@ const sillColorOptions: Array<{ id: SillColor; label: string; extra: number }> =
   { id: 'brown', label: 'Коричневый', extra: 260 },
   { id: 'anthracite', label: 'Антрацит', extra: 380 },
 ];
+
+const handleTypeLabels = handleTypeOptions.reduce<Record<HandleType, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { standard: 'Стандарт', premium: 'Премиум', design: 'Дизайн' });
+
+const handleColorLabels = handleColorOptions.reduce<Record<HandleColor, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { white: 'Белый', brown: 'Коричневый', silver: 'Серебро', gold: 'Золото' });
+
+const sillColorLabels = sillColorOptions.reduce<Record<SillColor, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { white: 'Белый', brown: 'Коричневый', anthracite: 'Антрацит' });
+
+const additionalOptionTypeLabels: Record<AdditionalOptionType, string> = {
+  sill: 'Подоконник',
+  drip: 'Отлив',
+};
 
 const defaultDrainage: DrainageType = 'bottom';
 const defaultSealColor: SealColor = 'black';
@@ -436,6 +522,7 @@ export const CalculatorPage = () => {
   const navigate = useNavigate();
   const state = location.state as CalculatorLocationState | null;
   const returnTo = typeof state?.returnTo === 'string' && state.returnTo.length > 0 ? state.returnTo : '/orders/new';
+  const linkedOrderId = extractOrderIdFromReturnPath(returnTo);
   const requestedPositionId = normalizePositionId(state?.positionId);
   const [positions, setPositions] = useState<CalculatorPosition[]>([]);
   const [positionId, setPositionId] = useState(requestedPositionId ?? 1);
@@ -844,19 +931,94 @@ export const CalculatorPage = () => {
       additionalOptions: nextDraft.additionalOptions,
     };
     const nextPositions = [...positions.filter((item) => item.id !== positionId), nextPosition].sort((a, b) => a.id - b.id);
+    const additionalOptionLabels = nextDraft.additionalOptions.map((option) => ({
+      id: option.id,
+      type: option.type,
+      typeLabel: additionalOptionTypeLabels[option.type],
+      length: option.length ?? 0,
+      width: option.width ?? 0,
+      sillColor: option.sillColor ?? null,
+      sillColorLabel: option.sillColor ? sillColorLabels[option.sillColor] : null,
+    }));
+    const mullionList = Object.entries(nextMullionOffsets)
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([index, offset]) => {
+        const leftMm = offset;
+        const rightMm = Math.max(0, nextMullionAxisSize - offset);
+        return {
+          index: Number(index),
+          leftMm,
+          rightMm,
+          leftPartMm: leftMm,
+          rightPartMm: rightMm,
+          leftLabel: `Левая часть: ${leftMm} мм`,
+          rightLabel: `Правая часть: ${rightMm} мм`,
+        };
+      });
+
+    const labels = {
+      openingTypeLabel: openingTypeLabels[nextDraft.openingType],
+      profileLabel: profileLabels[nextDraft.profileId],
+      packageLabel: packageLabels[nextDraft.packageType],
+      sealColorLabel: sealColorLabels[nextDraft.sealColor],
+      drainageLabel: drainageLabels[nextDraft.drainage],
+      windowColorSideLabel: windowColorSideLabels[nextDraft.windowColorSide],
+      windowColorLabel: windowColorLabels[nextDraft.windowColor],
+      handleTypeLabel: handleTypeLabels[nextDraft.handleType],
+      handleColorLabel: handleColorLabels[nextDraft.handleColor],
+      mullionOrientationLabel: nextDraft.mullionOrientation === 'vertical' ? 'Вертикальные импосты' : 'Горизонтальные импосты',
+      mullionOffsetsLabel: mullionList.length
+        ? mullionList.map((item) => `Импост ${item.index}: ${item.leftMm} мм / ${item.rightMm} мм`)
+        : [],
+      additionalOptions: additionalOptionLabels,
+    };
+    const values = {
+      positionId,
+      widthMm: nextDraft.width,
+      heightMm: nextDraft.height,
+      totalPrice: nextPrice,
+      openingType: nextDraft.openingType,
+      profileId: nextDraft.profileId,
+      packageType: nextDraft.packageType,
+      sealColor: nextDraft.sealColor,
+      drainage: nextDraft.drainage,
+      windowColorSide: nextDraft.windowColorSide,
+      windowColor: nextDraft.windowColor,
+      handleType: nextDraft.handleType,
+      handleColor: nextDraft.handleColor,
+      mullionOrientation: nextDraft.mullionOrientation,
+      mullionOffsets: nextMullionOffsets,
+      mullions: mullionList,
+      additionalOptions: nextDraft.additionalOptions.map((option) => ({
+        id: option.id,
+        type: option.type,
+        length: option.length ?? 0,
+        width: option.width ?? 0,
+        sillColor: option.sillColor ?? null,
+      })),
+      rawDraft: nextDraft,
+      rawPosition: nextPosition,
+      rawPositions: nextPositions,
+    };
 
     writeCalculatorPositions(nextPositions);
     await postLocalAjaxJson({
-      label: 'save-window',
-      path: LOCAL_AJAX_PATHS.saveWindow,
+      label: 'product_add',
+      path: LOCAL_AJAX_PATHS.addProduct,
       payload: {
         source: 'calculator',
-        action: 'save-window',
+        action: 'product_add',
+        orderId: linkedOrderId,
         positionId,
+        dimensions: {
+          widthMm: nextDraft.width,
+          heightMm: nextDraft.height,
+          label: `${nextDraft.width} x ${nextDraft.height} мм`,
+        },
         totalPrice: nextPrice,
-        draft: nextDraft,
-        position: nextPosition,
-        positions: nextPositions,
+        totalPriceLabel: formatCurrency(nextPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        labels,
+        values,
       },
     });
     navigate(returnTo, { state: { calculatorPositions: nextPositions } });

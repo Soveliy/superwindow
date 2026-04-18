@@ -13,7 +13,15 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import { useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import {
+  deleteBasketItem,
+  getRemoteOrder,
+  registerOrGetUser,
+  saveRemoteOrder,
+  type RemoteOrderSnapshot,
+} from '@/features/orders/api/order-rest';
 import {
   clearCalculatorPositions,
   isCalculatorPosition,
@@ -39,6 +47,14 @@ interface OrderDetailsLocationState {
 
 const INSTALLATION_RATE_PER_SQUARE = 3500;
 const DATE_RANGE_DAYS = 5;
+const serviceTypeLabels: Record<OrderService['type'], string> = {
+  installation: 'Монтаж (ГОСТ)',
+  delivery: 'Доставка',
+};
+const deliveryModeLabels: Record<DeliveryMode, string> = {
+  manual: 'Стоимость вручную',
+  pickup: 'Самовывоз',
+};
 
 const existingOrderDefaultValues: OrderCustomerForm = {
   fullName: 'Александр Петров',
@@ -209,6 +225,14 @@ const getInitialServices = (orderId: string | undefined): OrderService[] => {
   return ordersStorage.getOrderServices(orderId) ?? [];
 };
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return 'Не удалось выполнить запрос к API.';
+};
+
 const parseMoneyInput = (value: string): number => {
   const digits = value.replace(/[^\d]/g, '');
 
@@ -239,6 +263,106 @@ const formatArea = (value: number): string =>
     maximumFractionDigits: 2,
   }).format(value);
 
+const buildServiceLabels = (services: OrderService[], totalArea: number) =>
+  services.map((service) => {
+    if (service.type === 'installation') {
+      const basePrice = Math.round(totalArea * INSTALLATION_RATE_PER_SQUARE);
+      const finalPrice = Math.max(0, basePrice - service.discount);
+      return {
+        type: 'installation',
+        typeLabel: serviceTypeLabels.installation,
+        discount: service.discount,
+        discountLabel: formatCurrency(service.discount),
+        totalAreaLabel: `${formatArea(totalArea)} м²`,
+        basePriceLabel: formatCurrency(basePrice),
+        finalPriceLabel: formatCurrency(finalPrice),
+      };
+    }
+
+    const price = service.mode === 'pickup' ? 0 : service.price;
+    return {
+      type: 'delivery',
+      typeLabel: serviceTypeLabels.delivery,
+      deliveryModeLabel: deliveryModeLabels[service.mode],
+      price,
+      priceLabel: formatCurrency(price),
+    };
+  });
+
+const buildServiceValues = (services: OrderService[], totalArea: number) =>
+  services.map((service) => {
+    if (service.type === 'installation') {
+      const basePrice = Math.round(totalArea * INSTALLATION_RATE_PER_SQUARE);
+      const finalPrice = Math.max(0, basePrice - service.discount);
+      return {
+        type: 'installation',
+        discount: service.discount,
+        totalArea,
+        basePricePerSquare: INSTALLATION_RATE_PER_SQUARE,
+        basePrice,
+        finalPrice,
+      };
+    }
+
+    const price = service.mode === 'pickup' ? 0 : service.price;
+    return {
+      type: 'delivery',
+      deliveryMode: service.mode,
+      price,
+    };
+  });
+
+const buildOrderPositionLabels = (positions: CalculatorPosition[]) =>
+  positions.map((position, index) => ({
+    positionId: position.id,
+    title: `Позиция ${position.id}`,
+    index: index + 1,
+    dimensionsLabel: `${position.width ?? 0} x ${position.height ?? 0} мм`,
+    priceLabel: formatCurrency(position.price ?? 0, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+    openingTypeLabel: position.openingType ?? '',
+    profileLabel: position.profileId ?? '',
+    packageLabel: position.packageType ?? '',
+    additionalOptions:
+      position.additionalOptions?.map((option) => ({
+        id: option.id,
+        typeLabel: option.type === 'sill' ? 'Подоконник' : 'Отлив',
+        sizeLabel: `${option.length ?? 0} x ${option.width ?? 0} мм`,
+        sillColorLabel: option.sillColor ?? '',
+      })) ?? [],
+  }));
+
+const buildOrderPositionValues = (positions: CalculatorPosition[]) =>
+  positions.map((position, index) => ({
+    positionId: position.id,
+    index: index + 1,
+    widthMm: position.width ?? 0,
+    heightMm: position.height ?? 0,
+    price: position.price ?? 0,
+    openingType: position.openingType ?? null,
+    profileId: position.profileId ?? null,
+    packageType: position.packageType ?? null,
+    sealColor: position.sealColor ?? null,
+    drainage: position.drainage ?? null,
+    windowColorSide: position.windowColorSide ?? null,
+    windowColor: position.windowColor ?? null,
+    handleType: position.handleType ?? null,
+    handleColor: position.handleColor ?? null,
+    mullionOrientation: position.mullionOrientation ?? null,
+    mullionOffsets: position.mullionOffsets ?? {},
+    additionalOptions:
+      position.additionalOptions?.map((option) => ({
+        id: option.id,
+        type: option.type,
+        length: option.length ?? 0,
+        width: option.width ?? 0,
+        sillColor: option.sillColor ?? null,
+      })) ?? [],
+    rawPosition: position,
+  }));
+
 export const OrderDetailsPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -251,6 +375,11 @@ export const OrderDetailsPage = () => {
     getInitialPositions(orderId, shouldResetCalculatorPositions, locationState),
   );
   const [services, setServices] = useState<OrderService[]>(() => getInitialServices(orderId));
+  const [remoteOrder, setRemoteOrder] = useState<RemoteOrderSnapshot | null>(null);
+  const [remoteOrderError, setRemoteOrderError] = useState<string | null>(null);
+  const [isRemoteOrderLoading, setRemoteOrderLoading] = useState(false);
+  const [isSubmittingOrder, setSubmittingOrder] = useState(false);
+  const [reloadRemoteOrderKey, setReloadRemoteOrderKey] = useState(0);
   const [isCustomerInfoCollapsed, setCustomerInfoCollapsed] = useState(false);
   const [isServiceDialogOpen, setServiceDialogOpen] = useState(false);
   const [serviceDialogType, setServiceDialogType] = useState<OrderService['type'] | null>(null);
@@ -258,19 +387,25 @@ export const OrderDetailsPage = () => {
   const [deliveryModeInput, setDeliveryModeInput] = useState<DeliveryMode>('manual');
   const [deliveryPriceInput, setDeliveryPriceInput] = useState('2000');
   const [availableProductionDates, setAvailableProductionDates] = useState<string[]>(() => readAvailableProductionDates());
-  const order = orderId ? ordersStorage.getOrderById(orderId) : undefined;
-  const orderStatus = getOrderStatusUi(order?.status);
-  const isCustomerFieldsReadonly = order?.status === 'ready';
-  const resolvedOrderId = orderId ?? 'Новый заказ';
-  const calculatorReturnPath = orderId ? `/orders/${orderId}` : '/orders/new';
+  const previousOrderIdRef = useRef<string | undefined>(orderId);
+  const storedOrder = orderId ? ordersStorage.getOrderById(orderId) : undefined;
+  const currentOrderId = remoteOrder?.orderId ?? orderId ?? null;
+  const currentOrderStatusValue = remoteOrder?.status ?? storedOrder?.status;
+  const currentOrderAmount = remoteOrder?.amount ?? storedOrder?.amount ?? null;
+  const currentOrderCode = remoteOrder?.code ?? storedOrder?.code ?? orderDetailsMock.code;
+  const orderStatus = getOrderStatusUi(currentOrderStatusValue);
+  const isReadonlyOrder = currentOrderStatusValue === 'ready';
+  const isCustomerFieldsReadonly = isReadonlyOrder;
+  const resolvedOrderId = currentOrderId ?? 'Новый заказ';
+  const calculatorReturnPath = currentOrderId ? `/orders/${currentOrderId}` : '/orders/new';
   const collapsedCustomerName = form.fullName.trim() || 'Новый клиент';
   const collapsedCustomerAddress = form.address.trim() || 'Адрес не указан';
   const collapsedCustomerStatusLabel =
-    order?.status === 'ready'
+    currentOrderStatusValue === 'ready'
       ? 'Готов'
-      : order?.status === 'paid'
+      : currentOrderStatusValue === 'paid'
         ? 'Оплачен'
-        : order?.status === 'in_progress'
+        : currentOrderStatusValue === 'in_progress'
           ? 'В работе'
           : 'Черновик';
 
@@ -302,7 +437,8 @@ export const OrderDetailsPage = () => {
   );
 
   const calculatedAmount = windowsTotal + servicesTotal;
-  const savedOrderAmount = calculatedAmount > 0 ? calculatedAmount : order?.amount ?? null;
+  const hasEditableBasket = positions.length > 0 || services.length > 0;
+  const savedOrderAmount = hasEditableBasket ? calculatedAmount : currentOrderAmount;
   const orderTotalAmount = savedOrderAmount ?? 0;
 
   const installationService = services.find((service) => service.type === 'installation');
@@ -316,14 +452,77 @@ export const OrderDetailsPage = () => {
   const installationRangeLabel = form.installationDate ? formatIsoDateRange(form.installationDate) : '';
   const productionDateLabel = form.productionDate ? formatIsoDate(form.productionDate) : '';
 
-  const summaryCode = form.contractNumber.trim() || order?.code || orderDetailsMock.code;
+  const summaryCode = form.contractNumber.trim() || currentOrderCode;
+  const orderPositionLabels = useMemo(() => buildOrderPositionLabels(positions), [positions]);
+  const orderPositionValues = useMemo(() => buildOrderPositionValues(positions), [positions]);
+  const orderServiceLabels = useMemo(() => buildServiceLabels(services, totalArea), [services, totalArea]);
+  const orderServiceValues = useMemo(() => buildServiceValues(services, totalArea), [services, totalArea]);
 
   useEffect(() => {
-    setForm(getInitialFormValues(orderId));
-    setPositions(getInitialPositions(orderId, shouldResetCalculatorPositions, locationState));
-    setServices(getInitialServices(orderId));
     setAvailableProductionDates(readAvailableProductionDates());
-  }, [location.key, locationState, orderId, shouldResetCalculatorPositions]);
+    const didOrderChange = previousOrderIdRef.current !== orderId;
+
+    if (!orderId) {
+      setRemoteOrder(null);
+      setRemoteOrderError(null);
+      setRemoteOrderLoading(false);
+
+      if (didOrderChange) {
+        setForm(getInitialFormValues(orderId));
+        setServices(getInitialServices(orderId));
+      }
+
+      setPositions(getInitialPositions(orderId, shouldResetCalculatorPositions, locationState));
+      previousOrderIdRef.current = orderId;
+      return;
+    }
+
+    let isCancelled = false;
+    const localPositions = getInitialPositions(orderId, shouldResetCalculatorPositions, locationState);
+    const localServices = getInitialServices(orderId);
+
+    setForm(getInitialFormValues(orderId));
+    setPositions(localPositions);
+    setServices(localServices);
+    setRemoteOrderError(null);
+    setRemoteOrderLoading(true);
+    previousOrderIdRef.current = orderId;
+
+    void (async () => {
+      try {
+        const snapshot = await getRemoteOrder(orderId);
+
+        if (isCancelled) {
+          return;
+        }
+
+        const remotePositions = Array.isArray(locationState?.calculatorPositions)
+          ? locationState.calculatorPositions.filter(isCalculatorPosition).map(normalizeCalculatorPosition)
+          : snapshot.positions;
+
+        setRemoteOrder(snapshot);
+        setForm(snapshot.form);
+        setPositions(remotePositions);
+        setServices(snapshot.services);
+        ordersStorage.saveOrder(snapshot.orderId, snapshot.form, snapshot.amount, remotePositions, snapshot.services);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setRemoteOrder(null);
+        setRemoteOrderError(getErrorMessage(error));
+      } finally {
+        if (!isCancelled) {
+          setRemoteOrderLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [location.key, orderId, shouldResetCalculatorPositions, locationState, reloadRemoteOrderKey]);
 
   useEffect(() => {
     if (!orderId && shouldResetCalculatorPositions) {
@@ -335,46 +534,214 @@ export const OrderDetailsPage = () => {
     writeCalculatorPositions(positions);
   }, [positions]);
 
-  const handleSaveDraft = () => {
-    if (orderId) {
-      ordersStorage.saveOrder(orderId, form, savedOrderAmount, positions, services);
-      return;
-    }
+  const buildOrderPayload = (resolvedId: string | null, userId: string, action: 'order_create' | 'order_refresh') => {
+    const statusValue = currentOrderStatusValue ?? 'new';
+    const statusLabel = getOrderStatusUi(statusValue).label;
 
-    const createdOrderId = ordersStorage.createOrder(form, savedOrderAmount, positions, services);
-    navigate(`/orders/${createdOrderId}`, { replace: true });
+    return {
+      source: 'order-details',
+      action,
+      order_id: resolvedId,
+      orderId: resolvedId,
+      user_id: userId,
+      userId,
+      user: {
+        id: userId,
+        fullName: form.fullName.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+      },
+      order: {
+        id: resolvedId,
+        code: summaryCode,
+        customerName: form.fullName.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        userId,
+        status: statusValue,
+        statusLabel,
+        comment: form.comment.trim(),
+        amount: orderTotalAmount,
+        amountLabel: formatCurrency(orderTotalAmount, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+        measurementDate: form.measurementDate || null,
+        measurementDateLabel: measurementRangeLabel || '',
+        productionDate: form.productionDate || null,
+        productionDateLabel,
+        installationDate: form.installationDate || null,
+        installationDateLabel: installationRangeLabel || '',
+      },
+      summary: {
+        positionsCount: positions.length,
+        servicesCount: services.length,
+        windowsTotal,
+        windowsTotalLabel: formatCurrency(windowsTotal, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+        servicesTotal,
+        servicesTotalLabel: formatCurrency(servicesTotal, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+        totalArea,
+        totalAreaLabel: `${formatArea(totalArea)} м²`,
+        orderTotal: orderTotalAmount,
+        orderTotalLabel: formatCurrency(orderTotalAmount, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+      },
+      labels: {
+        orderStatusLabel: statusLabel,
+        positions: orderPositionLabels,
+        services: orderServiceLabels,
+      },
+      values: {
+        order_id: resolvedId,
+        orderId: resolvedId,
+        order_code: summaryCode,
+        orderCode: summaryCode,
+        customer: {
+          user_id: userId,
+          userId,
+          fullName: form.fullName.trim(),
+          phone: form.phone.trim(),
+          address: form.address.trim(),
+          contractNumber: form.contractNumber.trim(),
+          measurementDate: form.measurementDate || null,
+          productionDate: form.productionDate || null,
+          installationDate: form.installationDate || null,
+          comment: form.comment.trim(),
+        },
+        positions: orderPositionValues,
+        services: orderServiceValues,
+        totals: {
+          windowsTotal,
+          servicesTotal,
+          totalArea,
+          orderTotal: orderTotalAmount,
+        },
+        rawForm: form,
+        rawPositions: positions,
+        rawServices: services,
+      },
+      savedAt: new Date().toISOString(),
+    };
   };
 
-  const handleOpenPayment = () => {
-    if (orderId) {
-      ordersStorage.saveOrder(orderId, form, savedOrderAmount, positions, services);
-      navigate(`/payment?orderId=${encodeURIComponent(orderId)}`);
+  const persistOrder = async (): Promise<string> => {
+    if (isReadonlyOrder) {
+      if (currentOrderId) {
+        return currentOrderId;
+      }
+
+      throw new Error('Редактирование сохраненного заказа недоступно.');
+    }
+
+    setSubmittingOrder(true);
+    setRemoteOrderError(null);
+
+    try {
+      const userId = await registerOrGetUser(form);
+      const payload = buildOrderPayload(currentOrderId, userId, currentOrderId ? 'order_refresh' : 'order_create');
+      const { orderId: savedOrderId } = await saveRemoteOrder({
+        orderId: currentOrderId,
+        payload,
+      });
+      const snapshot = await getRemoteOrder(savedOrderId);
+
+      setRemoteOrder(snapshot);
+      setForm(snapshot.form);
+      setPositions(snapshot.positions);
+      setServices(snapshot.services);
+      ordersStorage.saveOrder(snapshot.orderId, snapshot.form, snapshot.amount, snapshot.positions, snapshot.services);
+      return snapshot.orderId;
+    } catch (error) {
+      setRemoteOrderError(getErrorMessage(error));
+      throw error;
+    } finally {
+      setSubmittingOrder(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (isReadonlyOrder) {
       return;
     }
 
-    const createdOrderId = ordersStorage.createOrder(form, savedOrderAmount, positions, services);
-    navigate(`/payment?orderId=${encodeURIComponent(createdOrderId)}`);
+    try {
+      const savedOrderId = await persistOrder();
+
+      if (!currentOrderId || savedOrderId !== currentOrderId) {
+        navigate(`/orders/${savedOrderId}`, { replace: true });
+        return;
+      }
+
+      setReloadRemoteOrderKey((value) => value + 1);
+    } catch {
+      return;
+    }
+  };
+
+  const handleOpenPayment = async () => {
+    if (isReadonlyOrder) {
+      if (currentOrderId) {
+        navigate(`/payment?orderId=${encodeURIComponent(currentOrderId)}`);
+      }
+
+      return;
+    }
+
+    try {
+      const savedOrderId = await persistOrder();
+      navigate(`/payment?orderId=${encodeURIComponent(savedOrderId)}`);
+    } catch {
+      return;
+    }
   };
 
   const handlePhoneChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     setForm((state) => ({ ...state, phone: formatPhoneInput(event.target.value) }));
   };
 
   const handleMeasurementDateChange = (nextValue: string) => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     setForm((state) => ({ ...state, measurementDate: nextValue }));
   };
 
   const handleProductionDateChange = (nextValue: string) => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     const normalizedValue = normalizeDateByOptions(nextValue, availableProductionDates);
     setForm((state) => ({ ...state, productionDate: normalizedValue }));
   };
 
   const handleInstallationDateChange = (nextValue: string) => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     const normalizedValue = normalizeDateByOptions(nextValue, availableInstallationDates);
     setForm((state) => ({ ...state, installationDate: normalizedValue }));
   };
 
   const copyPosition = (positionId: number): void => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     setPositions((state) => {
       const source = state.find((item) => item.id === positionId);
 
@@ -387,33 +754,67 @@ export const OrderDetailsPage = () => {
     });
   };
 
-  const removePosition = (positionId: number): void => {
-    setPositions((state) => state.filter((item) => item.id !== positionId));
+  const removePosition = async (positionId: number): Promise<void> => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
+    try {
+      setRemoteOrderError(null);
+      await deleteBasketItem({
+        orderId: currentOrderId,
+        orderCode: summaryCode,
+        positionId,
+      });
+      setPositions((state) => state.filter((item) => item.id !== positionId));
+    } catch (error) {
+      setRemoteOrderError(getErrorMessage(error));
+    }
   };
 
   const handleAddWindow = (): void => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     const nextId = positions.length > 0 ? Math.max(...positions.map((item) => item.id)) + 1 : 1;
     writeCalculatorPositions(positions);
     navigate('/calculator', { state: { positionId: nextId, returnTo: calculatorReturnPath } });
   };
 
   const openCalculatorForPosition = (positionId: number): void => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     writeCalculatorPositions(positions);
     navigate('/calculator', { state: { positionId, returnTo: calculatorReturnPath } });
   };
 
   const openAddServiceDialog = (): void => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     setServiceDialogType(null);
     setServiceDialogOpen(true);
   };
 
   const openInstallationDialog = (): void => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     setInstallationDiscountInput(String(installationService?.discount ?? 0));
     setServiceDialogType('installation');
     setServiceDialogOpen(true);
   };
 
   const openDeliveryDialog = (): void => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     setDeliveryModeInput(deliveryService?.mode ?? 'manual');
     setDeliveryPriceInput(String(deliveryService?.price ?? 2000));
     setServiceDialogType('delivery');
@@ -425,7 +826,11 @@ export const OrderDetailsPage = () => {
     setServiceDialogType(null);
   };
 
-  const saveInstallationService = (): void => {
+  const saveInstallationService = async (): Promise<void> => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     const discount = parseMoneyInput(installationDiscountInput);
     const nextService: OrderService = {
       type: 'installation',
@@ -434,41 +839,115 @@ export const OrderDetailsPage = () => {
     const nextServices = upsertService(services, nextService);
     const nextServicesTotal = nextServices.reduce((total, service) => total + getServicePrice(service, totalArea), 0);
     const nextOrderAmount = windowsTotal + nextServicesTotal;
+    const statusValue = currentOrderStatusValue ?? 'new';
+    const statusLabel = getOrderStatusUi(statusValue).label;
+    const basePrice = Math.round(totalArea * INSTALLATION_RATE_PER_SQUARE);
+    const finalPrice = Math.max(0, basePrice - discount);
+    const serviceLabels = buildServiceLabels(nextServices, totalArea);
+    const serviceValues = buildServiceValues(nextServices, totalArea);
+    const labels = {
+      serviceTypeLabel: serviceTypeLabels.installation,
+      orderStatusLabel: statusLabel,
+      positionIdLabel: 'Заказ целиком',
+      amountLabel: formatCurrency(nextOrderAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      discountLabel: formatCurrency(discount),
+      totalAreaLabel: `${formatArea(totalArea)} м²`,
+      basePriceLabel: formatCurrency(basePrice),
+      finalPriceLabel: formatCurrency(finalPrice),
+      services: serviceLabels,
+    };
+    const props = {
+      serviceTypeLabel: serviceTypeLabels.installation,
+      serviceType: 'installation',
+      orderId: String(currentOrderId ?? ''),
+      orderCode: summaryCode,
+      positionId: '',
+      positionIdLabel: 'Заказ целиком',
+      amount: String(nextOrderAmount),
+      amountLabel: formatCurrency(nextOrderAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      discount: String(discount),
+      discountLabel: formatCurrency(discount),
+      totalArea: String(totalArea),
+      totalAreaLabel: `${formatArea(totalArea)} м²`,
+      basePrice: String(basePrice),
+      basePriceLabel: formatCurrency(basePrice),
+      finalPrice: String(finalPrice),
+      finalPriceLabel: formatCurrency(finalPrice),
+      services: serviceLabels,
+    };
+    const values = {
+      orderId: currentOrderId,
+      orderCode: summaryCode,
+      customerName: form.fullName.trim(),
+      orderStatus: statusValue,
+      orderAmount: nextOrderAmount,
+      serviceType: 'installation',
+      positionId: null,
+      discount,
+      totalArea,
+      basePricePerSquare: INSTALLATION_RATE_PER_SQUARE,
+      basePrice,
+      finalPrice,
+      rawForm: form,
+      rawPositions: positions,
+      rawServices: nextServices,
+      rawService: nextService,
+      services: serviceValues,
+    };
 
-    void postLocalAjaxJson({
-      label: 'save-service-installation',
-      path: LOCAL_AJAX_PATHS.saveService,
-      payload: {
-        source: 'order-details',
-        action: 'save-service',
-        serviceType: 'installation',
-        orderId: orderId ?? null,
-        order: {
-          id: order?.id ?? orderId ?? null,
-          code: summaryCode,
-          customerName: form.fullName.trim(),
-          status: order?.status ?? 'new',
-          amount: nextOrderAmount,
+    try {
+      setRemoteOrderError(null);
+      await postLocalAjaxJson({
+        label: 'service_add',
+        path: LOCAL_AJAX_PATHS.addService,
+        payload: {
+          source: 'order-details',
+          action: 'service_add',
+          serviceTypeLabel: serviceTypeLabels.installation,
+          orderId: currentOrderId,
+          positionId: null,
+          order: {
+            id: currentOrderId,
+            code: summaryCode,
+            customerName: form.fullName.trim(),
+            statusLabel,
+            amount: nextOrderAmount,
+            amountLabel: formatCurrency(nextOrderAmount, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }),
+          },
+          pricing: {
+            basePricePerSquare: INSTALLATION_RATE_PER_SQUARE,
+            totalArea,
+            basePrice,
+            finalPrice,
+            labels: {
+              totalArea: `${formatArea(totalArea)} м²`,
+              basePrice: formatCurrency(basePrice),
+              discount: formatCurrency(discount),
+              finalPrice: formatCurrency(finalPrice),
+            },
+          },
+          labels,
+          props,
+          values,
+          savedAt: new Date().toISOString(),
         },
-        form,
-        positions,
-        services: nextServices,
-        service: nextService,
-        pricing: {
-          basePricePerSquare: INSTALLATION_RATE_PER_SQUARE,
-          totalArea,
-          basePrice: Math.round(totalArea * INSTALLATION_RATE_PER_SQUARE),
-          finalPrice: Math.max(0, Math.round(totalArea * INSTALLATION_RATE_PER_SQUARE) - discount),
-        },
-        savedAt: new Date().toISOString(),
-      },
-    });
+      });
 
-    setServices(nextServices);
-    closeServiceDialog();
+      setServices(nextServices);
+      closeServiceDialog();
+    } catch (error) {
+      setRemoteOrderError(getErrorMessage(error));
+    }
   };
 
-  const saveDeliveryService = (): void => {
+  const saveDeliveryService = async (): Promise<void> => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
     const price = deliveryModeInput === 'pickup' ? 0 : parseMoneyInput(deliveryPriceInput);
     const nextService: OrderService = {
       type: 'delivery',
@@ -478,40 +957,111 @@ export const OrderDetailsPage = () => {
     const nextServices = upsertService(services, nextService);
     const nextServicesTotal = nextServices.reduce((total, service) => total + getServicePrice(service, totalArea), 0);
     const nextOrderAmount = windowsTotal + nextServicesTotal;
+    const statusValue = currentOrderStatusValue ?? 'new';
+    const statusLabel = getOrderStatusUi(statusValue).label;
+    const serviceLabels = buildServiceLabels(nextServices, totalArea);
+    const serviceValues = buildServiceValues(nextServices, totalArea);
+    const labels = {
+      serviceTypeLabel: serviceTypeLabels.delivery,
+      deliveryModeLabel: deliveryModeLabels[deliveryModeInput],
+      orderStatusLabel: statusLabel,
+      positionIdLabel: 'Заказ целиком',
+      amountLabel: formatCurrency(nextOrderAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      priceLabel: formatCurrency(price),
+      services: serviceLabels,
+    };
+    const props = {
+      serviceTypeLabel: serviceTypeLabels.delivery,
+      serviceType: 'delivery',
+      deliveryModeLabel: deliveryModeLabels[deliveryModeInput],
+      deliveryMode: deliveryModeInput,
+      orderId: String(currentOrderId ?? ''),
+      orderCode: summaryCode,
+      positionId: '',
+      positionIdLabel: 'Заказ целиком',
+      amount: String(nextOrderAmount),
+      amountLabel: formatCurrency(nextOrderAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      price: String(price),
+      priceLabel: formatCurrency(price),
+      services: serviceLabels,
+    };
+    const values = {
+      orderId: currentOrderId,
+      orderCode: summaryCode,
+      customerName: form.fullName.trim(),
+      orderStatus: statusValue,
+      orderAmount: nextOrderAmount,
+      serviceType: 'delivery',
+      positionId: null,
+      deliveryMode: deliveryModeInput,
+      price,
+      rawForm: form,
+      rawPositions: positions,
+      rawServices: nextServices,
+      rawService: nextService,
+      services: serviceValues,
+    };
 
-    void postLocalAjaxJson({
-      label: 'save-service-delivery',
-      path: LOCAL_AJAX_PATHS.saveService,
-      payload: {
-        source: 'order-details',
-        action: 'save-service',
-        serviceType: 'delivery',
-        orderId: orderId ?? null,
-        order: {
-          id: order?.id ?? orderId ?? null,
-          code: summaryCode,
-          customerName: form.fullName.trim(),
-          status: order?.status ?? 'new',
-          amount: nextOrderAmount,
+    try {
+      setRemoteOrderError(null);
+      await postLocalAjaxJson({
+        label: 'service_add',
+        path: LOCAL_AJAX_PATHS.addService,
+        payload: {
+          source: 'order-details',
+          action: 'service_add',
+          serviceTypeLabel: serviceTypeLabels.delivery,
+          orderId: currentOrderId,
+          positionId: null,
+          order: {
+            id: currentOrderId,
+            code: summaryCode,
+            customerName: form.fullName.trim(),
+            statusLabel,
+            amount: nextOrderAmount,
+            amountLabel: formatCurrency(nextOrderAmount, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }),
+          },
+          pricing: {
+            finalPrice: price,
+            labels: {
+              deliveryMode: deliveryModeLabels[deliveryModeInput],
+              finalPrice: formatCurrency(price),
+            },
+          },
+          labels,
+          props,
+          values,
+          savedAt: new Date().toISOString(),
         },
-        form,
-        positions,
-        services: nextServices,
-        service: nextService,
-        pricing: {
-          finalPrice: price,
-        },
-        savedAt: new Date().toISOString(),
-      },
-    });
+      });
 
-    setServices(nextServices);
-    closeServiceDialog();
+      setServices(nextServices);
+      closeServiceDialog();
+    } catch (error) {
+      setRemoteOrderError(getErrorMessage(error));
+    }
   };
 
-  const removeService = (serviceType: OrderService['type']): void => {
-    setServices((state) => state.filter((service) => service.type !== serviceType));
-    closeServiceDialog();
+  const removeService = async (serviceType: OrderService['type']): Promise<void> => {
+    if (isReadonlyOrder) {
+      return;
+    }
+
+    try {
+      setRemoteOrderError(null);
+      await deleteBasketItem({
+        orderId: currentOrderId,
+        orderCode: summaryCode,
+        serviceType,
+      });
+      setServices((state) => state.filter((service) => service.type !== serviceType));
+      closeServiceDialog();
+    } catch (error) {
+      setRemoteOrderError(getErrorMessage(error));
+    }
   };
 
   return (
@@ -526,16 +1076,39 @@ export const OrderDetailsPage = () => {
             <ArrowLeft className="h-4 w-4" />
           </button>
           <h1 className="text-center text-lg font-bold text-ink-800">Детали заказа</h1>
-          <button
-            type="button"
-            className="justify-self-end text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700"
-            onClick={handleSaveDraft}
-          >
-            Сохранить
-          </button>
+          {isReadonlyOrder ? (
+            <span className="justify-self-end text-xs font-semibold uppercase tracking-wide text-slate-400">Просмотр</span>
+          ) : (
+            <button
+              type="button"
+              disabled={isSubmittingOrder || isRemoteOrderLoading}
+              className="justify-self-end text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleSaveDraft}
+            >
+              {isSubmittingOrder ? 'Сохраняем...' : 'Сохранить'}
+            </button>
+          )}
         </header>
 
         <section className="space-y-6 px-4 pb-6 pt-5">
+          {isRemoteOrderLoading ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              Загружаем заказ из API...
+            </div>
+          ) : null}
+
+          {remoteOrderError ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+              {remoteOrderError}
+            </div>
+          ) : null}
+
+          {isReadonlyOrder ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Заказ в финальном статусе и доступен только для просмотра.
+            </div>
+          ) : null}
+
           <section>
             {isCustomerInfoCollapsed ? (
               <button
@@ -717,30 +1290,34 @@ export const OrderDetailsPage = () => {
                       </p>
 
                       <div className="mt-2 flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => copyPosition(position.id)}
-                          className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-300 bg-slate-100 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-200"
-                        >
-                          <Copy className="h-4 w-4" />
-                          Копировать
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openCalculatorForPosition(position.id)}
-                          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200"
-                          aria-label="Редактировать позицию"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removePosition(position.id)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200"
-                          aria-label="Удалить позицию"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {isReadonlyOrder ? null : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => copyPosition(position.id)}
+                              className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-300 bg-slate-100 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+                            >
+                              <Copy className="h-4 w-4" />
+                              Копировать
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openCalculatorForPosition(position.id)}
+                              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              aria-label="Редактировать позицию"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removePosition(position.id)}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              aria-label="Удалить позицию"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </article>
@@ -752,16 +1329,18 @@ export const OrderDetailsPage = () => {
               </div>
             )}
 
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={handleAddWindow}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-400 bg-brand-50 text-base font-bold text-brand-600 hover:bg-brand-100"
-              >
-                <Plus className="h-5 w-5" />
-                Добавить еще одно окно
-              </button>
-            </div>
+            {isReadonlyOrder ? null : (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={handleAddWindow}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-400 bg-brand-50 text-base font-bold text-brand-600 hover:bg-brand-100"
+                >
+                  <Plus className="h-5 w-5" />
+                  Добавить еще одно окно
+                </button>
+              </div>
+            )}
           </section>
           <section className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-sm">
             <div className="mb-3">
@@ -770,14 +1349,16 @@ export const OrderDetailsPage = () => {
                     <h2 className="text-2xl font-extrabold tracking-tight text-ink-800">
                   Услуги
                   </h2>
-                  <button
-                type="button"
-                onClick={openAddServiceDialog}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 text-sm font-semibold text-brand-600 hover:bg-brand-100"
-              >
-                <Plus className="h-4 w-4" />
-                Добавить услуги
-              </button>
+                  {isReadonlyOrder ? null : (
+                    <button
+                      type="button"
+                      onClick={openAddServiceDialog}
+                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 text-sm font-semibold text-brand-600 hover:bg-brand-100"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Добавить услуги
+                    </button>
+                  )}
                 </div>
                 <p className="text-sm text-slate-500">Монтаж по ГОСТу и доставка</p>
               </div>
@@ -816,14 +1397,16 @@ export const OrderDetailsPage = () => {
                         <p className="text-sm text-slate-500">{subtitle}</p>
                       </div>
                       <p className="text-xl font-extrabold text-ink-800">{formatCurrency(price)}</p>
-                      <button
-                        type="button"
-                        onClick={isInstallation ? openInstallationDialog : openDeliveryDialog}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100"
-                        aria-label="Редактировать услугу"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
+                      {isReadonlyOrder ? null : (
+                        <button
+                          type="button"
+                          onClick={isInstallation ? openInstallationDialog : openDeliveryDialog}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                          aria-label="Редактировать услугу"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                     </article>
                   );
                 })}
@@ -861,8 +1444,12 @@ export const OrderDetailsPage = () => {
             </div>
           </section>
 
-          <Button className="h-14 text-base" onClick={handleOpenPayment}>
-            Перейти к оплате &gt;
+          <Button
+            className="h-14 text-base"
+            disabled={isSubmittingOrder || isRemoteOrderLoading}
+            onClick={handleOpenPayment}
+          >
+            {isSubmittingOrder ? 'Сохраняем заказ...' : 'Перейти к оплате >'}
           </Button>
         </section>
       </main>
