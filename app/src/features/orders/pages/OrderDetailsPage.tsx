@@ -43,6 +43,8 @@ import { TextField } from '@/shared/ui/TextField';
 interface OrderDetailsLocationState {
   resetCalculatorPositions?: boolean;
   calculatorPositions?: CalculatorPosition[];
+  draftForm?: OrderCustomerForm;
+  draftServices?: OrderService[];
 }
 
 const INSTALLATION_RATE_PER_SQUARE = 3500;
@@ -193,7 +195,85 @@ const normalizeDateByOptions = (value: string, options: string[]): string => {
   return nextAfter ?? options[options.length - 1];
 };
 
-const getInitialFormValues = (orderId: string | undefined): OrderCustomerForm => {
+const isDraftFormState = (value: unknown): value is OrderCustomerForm => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const form = value as Partial<OrderCustomerForm>;
+
+  return (
+    typeof form.fullName === 'string' &&
+    typeof form.phone === 'string' &&
+    typeof form.address === 'string' &&
+    typeof form.contractNumber === 'string' &&
+    typeof form.measurementDate === 'string' &&
+    typeof form.productionDate === 'string' &&
+    typeof form.installationDate === 'string' &&
+    typeof form.comment === 'string'
+  );
+};
+
+const isDraftServiceState = (value: unknown): value is OrderService => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const service = value as Partial<OrderService>;
+
+  if (service.type === 'installation') {
+    return typeof service.discount === 'number' && Number.isFinite(service.discount) && service.discount >= 0;
+  }
+
+  if (service.type === 'delivery') {
+    return (
+      (service.mode === 'manual' || service.mode === 'pickup') &&
+      typeof service.price === 'number' &&
+      Number.isFinite(service.price) &&
+      service.price >= 0
+    );
+  }
+
+  return false;
+};
+
+const getLocationDraftForm = (locationState: OrderDetailsLocationState | null): OrderCustomerForm | null => {
+  if (!isDraftFormState(locationState?.draftForm)) {
+    return null;
+  }
+
+  return { ...locationState.draftForm };
+};
+
+const getLocationDraftServices = (locationState: OrderDetailsLocationState | null): OrderService[] | null => {
+  if (!Array.isArray(locationState?.draftServices)) {
+    return null;
+  }
+
+  return locationState.draftServices.filter(isDraftServiceState).map((service) =>
+    service.type === 'installation'
+      ? {
+          type: 'installation',
+          discount: service.discount,
+        }
+      : {
+          type: 'delivery',
+          mode: service.mode,
+          price: service.price,
+        },
+  );
+};
+
+const getInitialFormValues = (
+  orderId: string | undefined,
+  locationState: OrderDetailsLocationState | null,
+): OrderCustomerForm => {
+  const locationDraftForm = getLocationDraftForm(locationState);
+
+  if (locationDraftForm) {
+    return locationDraftForm;
+  }
+
   if (!orderId) {
     return ordersStorage.createEmptyOrderCustomerForm();
   }
@@ -217,7 +297,16 @@ const getInitialPositions = (
   return ordersStorage.getOrderPositions(orderId) ?? [];
 };
 
-const getInitialServices = (orderId: string | undefined): OrderService[] => {
+const getInitialServices = (
+  orderId: string | undefined,
+  locationState: OrderDetailsLocationState | null,
+): OrderService[] => {
+  const locationDraftServices = getLocationDraftServices(locationState);
+
+  if (locationDraftServices) {
+    return locationDraftServices;
+  }
+
   if (!orderId) {
     return [];
   }
@@ -370,11 +459,11 @@ export const OrderDetailsPage = () => {
   const locationState = location.state as OrderDetailsLocationState | null;
   const shouldResetCalculatorPositions = locationState?.resetCalculatorPositions === true;
 
-  const [form, setForm] = useState<OrderCustomerForm>(() => getInitialFormValues(orderId));
+  const [form, setForm] = useState<OrderCustomerForm>(() => getInitialFormValues(orderId, locationState));
   const [positions, setPositions] = useState<CalculatorPosition[]>(() =>
     getInitialPositions(orderId, shouldResetCalculatorPositions, locationState),
   );
-  const [services, setServices] = useState<OrderService[]>(() => getInitialServices(orderId));
+  const [services, setServices] = useState<OrderService[]>(() => getInitialServices(orderId, locationState));
   const [remoteOrder, setRemoteOrder] = useState<RemoteOrderSnapshot | null>(null);
   const [remoteOrderError, setRemoteOrderError] = useState<string | null>(null);
   const [isRemoteOrderLoading, setRemoteOrderLoading] = useState(false);
@@ -468,8 +557,8 @@ export const OrderDetailsPage = () => {
       setRemoteOrderLoading(false);
 
       if (didOrderChange) {
-        setForm(getInitialFormValues(orderId));
-        setServices(getInitialServices(orderId));
+        setForm(getInitialFormValues(orderId, locationState));
+        setServices(getInitialServices(orderId, locationState));
       }
 
       setPositions(getInitialPositions(orderId, shouldResetCalculatorPositions, locationState));
@@ -479,9 +568,10 @@ export const OrderDetailsPage = () => {
 
     let isCancelled = false;
     const localPositions = getInitialPositions(orderId, shouldResetCalculatorPositions, locationState);
-    const localServices = getInitialServices(orderId);
+    const localForm = getInitialFormValues(orderId, locationState);
+    const localServices = getInitialServices(orderId, locationState);
 
-    setForm(getInitialFormValues(orderId));
+    setForm(localForm);
     setPositions(localPositions);
     setServices(localServices);
     setRemoteOrderError(null);
@@ -499,12 +589,14 @@ export const OrderDetailsPage = () => {
         const remotePositions = Array.isArray(locationState?.calculatorPositions)
           ? locationState.calculatorPositions.filter(isCalculatorPosition).map(normalizeCalculatorPosition)
           : snapshot.positions;
+        const nextForm = getLocationDraftForm(locationState) ?? snapshot.form;
+        const nextServices = getLocationDraftServices(locationState) ?? snapshot.services;
 
         setRemoteOrder(snapshot);
-        setForm(snapshot.form);
+        setForm(nextForm);
         setPositions(remotePositions);
-        setServices(snapshot.services);
-        ordersStorage.saveOrder(snapshot.orderId, snapshot.form, snapshot.amount, remotePositions, snapshot.services);
+        setServices(nextServices);
+        ordersStorage.saveOrder(snapshot.orderId, nextForm, snapshot.amount, remotePositions, nextServices);
       } catch (error) {
         if (isCancelled) {
           return;
@@ -779,7 +871,14 @@ export const OrderDetailsPage = () => {
 
     const nextId = positions.length > 0 ? Math.max(...positions.map((item) => item.id)) + 1 : 1;
     writeCalculatorPositions(positions);
-    navigate('/calculator', { state: { positionId: nextId, returnTo: calculatorReturnPath } });
+    navigate('/calculator', {
+      state: {
+        positionId: nextId,
+        returnTo: calculatorReturnPath,
+        draftForm: form,
+        draftServices: services,
+      },
+    });
   };
 
   const openCalculatorForPosition = (positionId: number): void => {
@@ -788,7 +887,14 @@ export const OrderDetailsPage = () => {
     }
 
     writeCalculatorPositions(positions);
-    navigate('/calculator', { state: { positionId, returnTo: calculatorReturnPath } });
+    navigate('/calculator', {
+      state: {
+        positionId,
+        returnTo: calculatorReturnPath,
+        draftForm: form,
+        draftServices: services,
+      },
+    });
   };
 
   const openAddServiceDialog = (): void => {

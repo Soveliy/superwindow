@@ -1,0 +1,192 @@
+Array
+(
+    [GET] => Array
+        (
+            [action] => service_add
+        )
+
+    [RAW] => {"source":"order-details","action":"service_add","serviceTypeLabel":"Монтаж (ГОСТ)","orderId":null,"positionId":null,"order":{"id":null,"code":"SW-88291","customerName":"Иванов Иван Иванов","statusLabel":"Расчет","amount":18739,"amountLabel":"18 739,00 ₽"},"pricing":{"basePricePerSquare":3500,"totalArea":1.82,"basePrice":6370,"finalPrice":6370,"labels":{"totalArea":"1,82 м²","basePrice":"6 370 ₽","discount":"0 ₽","finalPrice":"6 370 ₽"}},"labels":{"serviceTypeLabel":"Монтаж (ГОСТ)","orderStatusLabel":"Расчет","positionIdLabel":"Заказ целиком","amountLabel":"18 739,00 ₽","discountLabel":"0 ₽","totalAreaLabel":"1,82 м²","basePriceLabel":"6 370 ₽","finalPriceLabel":"6 370 ₽","services":[{"type":"installation","typeLabel":"Монтаж (ГОСТ)","discount":0,"discountLabel":"0 ₽","totalAreaLabel":"1,82 м²","basePriceLabel":"6 370 ₽","finalPriceLabel":"6 370 ₽"}]},"props":{"serviceTypeLabel":"Монтаж (ГОСТ)","serviceType":"installation","orderId":"","orderCode":"SW-88291","positionId":"","positionIdLabel":"Заказ целиком","amount":"18739","amountLabel":"18 739,00 ₽","discount":"0","discountLabel":"0 ₽","totalArea":"1.82","totalAreaLabel":"1,82 м²","basePrice":"6370","basePriceLabel":"6 370 ₽","finalPrice":"6370","finalPriceLabel":"6 370 ₽","services":[{"type":"installation","typeLabel":"Монтаж (ГОСТ)","discount":0,"discountLabel":"0 ₽","totalAreaLabel":"1,82 м²","basePriceLabel":"6 370 ₽","finalPriceLabel":"6 370 ₽"}]},"values":{"orderId":null,"orderCode":"SW-88291","customerName":"Иванов Иван Иванов","orderStatus":"new","orderAmount":18739,"serviceType":"installation","positionId":null,"discount":0,"totalArea":1.82,"basePricePerSquare":3500,"basePrice":6370,"finalPrice":6370,"rawForm":{"fullName":"Иванов Иван Иванов","phone":"+7 (910) 312-26-94","address":"ПЛК 81","contractNumber":"","measurementDate":"2026-04-24","productionDate":"","installationDate":"2026-04-24","comment":""},"rawPositions":[{"id":1,"width":1300,"height":1400,"price":12369,"openingType":"double","profileId":"grunder-60","packageType":"standard","sealColor":"black","drainage":"bottom","windowColorSide":"solid","windowColor":"white","handleType":"standard","handleColor":"white","mullionOrientation":"vertical","mullionOffsets":{"1":650}}],"rawServices":[{"type":"installation","discount":0}],"rawService":{"type":"installation","discount":0},"services":[{"type":"installation","discount":0,"totalArea":1.82,"basePricePerSquare":3500,"basePrice":6370,"finalPrice":6370}]},"savedAt":"2026-04-23T11:58:55.183Z"}
+    [JSON] => Array
+        (
+            [source] => order-details
+            [action] => service_add
+            [serviceTypeLabel] => Монтаж (ГОСТ)
+            [orderId] => 
+            [positionId] => 
+            [order] => Array
+                (
+                    [id] => 
+                    [code] => SW-88291
+                    [customerName] => Иванов Иван Иванов
+                    [statusLabel] => Расчет
+                    [amount] => 18739
+                    [amountLabel] => 18 739,00 ₽
+                )
+
+            [pricing] => Array
+                (
+                    [basePricePerSquare] => 3500
+                    [totalArea] => 1.82
+                    [basePrice] => 6370
+                    [finalPrice] => 6370
+                    [labels] => Array
+                        (
+                            [totalArea] => 1,82 м²
+                            [basePrice] => 6 370 ₽
+                            [discount] => 0 ₽
+                            [finalPrice] => 6 370 ₽
+                        )
+
+                )
+
+            [labels] => Array
+                (
+                    [serviceTypeLabel] => Монтаж (ГОСТ)
+                    [orderStatusLabel] => Расчет
+                    [positionIdLabel] => Заказ целиком
+                    [amountLabel] => 18 739,00 ₽
+                    [discountLabel] => 0 ₽
+                    [totalAreaLabel] => 1,82 м²
+                    [basePriceLabel] => 6 370 ₽
+                    [finalPriceLabel] => 6 370 ₽
+                    [services] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [type] => installation
+                                    [typeLabel] => Монтаж (ГОСТ)
+                                    [discount] => 0
+                                    [discountLabel] => 0 ₽
+                                    [totalAreaLabel] => 1,82 м²
+                                    [basePriceLabel] => 6 370 ₽
+                                    [finalPriceLabel] => 6 370 ₽
+                                )
+
+                        )
+
+                )
+
+            [props] => Array
+                (
+                    [serviceTypeLabel] => Монтаж (ГОСТ)
+                    [serviceType] => installation
+                    [orderId] => 
+                    [orderCode] => SW-88291
+                    [positionId] => 
+                    [positionIdLabel] => Заказ целиком
+                    [amount] => 18739
+                    [amountLabel] => 18 739,00 ₽
+                    [discount] => 0
+                    [discountLabel] => 0 ₽
+                    [totalArea] => 1.82
+                    [totalAreaLabel] => 1,82 м²
+                    [basePrice] => 6370
+                    [basePriceLabel] => 6 370 ₽
+                    [finalPrice] => 6370
+                    [finalPriceLabel] => 6 370 ₽
+                    [services] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [type] => installation
+                                    [typeLabel] => Монтаж (ГОСТ)
+                                    [discount] => 0
+                                    [discountLabel] => 0 ₽
+                                    [totalAreaLabel] => 1,82 м²
+                                    [basePriceLabel] => 6 370 ₽
+                                    [finalPriceLabel] => 6 370 ₽
+                                )
+
+                        )
+
+                )
+
+            [values] => Array
+                (
+                    [orderId] => 
+                    [orderCode] => SW-88291
+                    [customerName] => Иванов Иван Иванов
+                    [orderStatus] => new
+                    [orderAmount] => 18739
+                    [serviceType] => installation
+                    [positionId] => 
+                    [discount] => 0
+                    [totalArea] => 1.82
+                    [basePricePerSquare] => 3500
+                    [basePrice] => 6370
+                    [finalPrice] => 6370
+                    [rawForm] => Array
+                        (
+                            [fullName] => Иванов Иван Иванов
+                            [phone] => +7 (910) 312-26-94
+                            [address] => ПЛК 81
+                            [contractNumber] => 
+                            [measurementDate] => 2026-04-24
+                            [productionDate] => 
+                            [installationDate] => 2026-04-24
+                            [comment] => 
+                        )
+
+                    [rawPositions] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 1
+                                    [width] => 1300
+                                    [height] => 1400
+                                    [price] => 12369
+                                    [openingType] => double
+                                    [profileId] => grunder-60
+                                    [packageType] => standard
+                                    [sealColor] => black
+                                    [drainage] => bottom
+                                    [windowColorSide] => solid
+                                    [windowColor] => white
+                                    [handleType] => standard
+                                    [handleColor] => white
+                                    [mullionOrientation] => vertical
+                                    [mullionOffsets] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                )
+
+                        )
+
+                    [rawServices] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [type] => installation
+                                    [discount] => 0
+                                )
+
+                        )
+
+                    [rawService] => Array
+                        (
+                            [type] => installation
+                            [discount] => 0
+                        )
+
+                    [services] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [type] => installation
+                                    [discount] => 0
+                                    [totalArea] => 1.82
+                                    [basePricePerSquare] => 3500
+                                    [basePrice] => 6370
+                                    [finalPrice] => 6370
+                                )
+
+                        )
+
+                )
+
+            [savedAt] => 2026-04-23T11:58:55.183Z
+        )
+
+)

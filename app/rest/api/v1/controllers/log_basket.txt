@@ -1,0 +1,292 @@
+Bitrix\Sale\BasketItem Object
+(
+    [fields:protected] => Bitrix\Sale\Internals\Fields Object
+        (
+            [values:protected] => Array
+                (
+                    [MODULE] => catalog
+                    [BASE_PRICE] => 12369
+                    [CAN_BUY] => Y
+                    [VAT_RATE] => 
+                    [CUSTOM_PRICE] => Y
+                    [PRODUCT_ID] => 3463
+                    [XML_ID] => bx_69dcc9f503758
+                    [LID] => s2
+                    [SORT] => 100
+                    [CURRENCY] => RUB
+                    [PRODUCT_PROVIDER_CLASS] => 
+                    [QUANTITY] => 1
+                    [PRICE] => 12369
+                    [NAME] => Двухстворчатое окно Grunder 60 мм Стандарт
+                )
+
+            [changedValues:protected] => Array
+                (
+                    [SORT] => 1
+                    [CURRENCY] => 1
+                    [CUSTOM_PRICE] => 1
+                    [PRODUCT_PROVIDER_CLASS] => 1
+                    [QUANTITY] => 1
+                    [PRICE] => 1
+                    [BASE_PRICE] => 1
+                    [NAME] => 1
+                )
+
+            [originalValues:Bitrix\Sale\Internals\Fields:private] => Array
+                (
+                    [SORT] => 
+                    [CURRENCY] => 
+                    [CUSTOM_PRICE] => N
+                    [PRODUCT_PROVIDER_CLASS] => 
+                    [QUANTITY] => 
+                    [PRICE] => 
+                    [BASE_PRICE] => 0
+                    [NAME] => 
+                )
+
+            [customFields:Bitrix\Sale\Internals\Fields:private] => Array
+                (
+                    [PRICE] => 1
+                )
+
+            [isClone:protected] => 
+        )
+
+    [eventName:protected] => SaleBasketItem
+    [collection:protected] => Bitrix\Sale\Basket Object
+        (
+            [collection:protected] => Array
+                (
+                    [0] => Bitrix\Sale\BasketItem Object
+                        (
+                            [fields:protected] => Bitrix\Sale\Internals\Fields Object
+                                (
+                                    [values:protected] => Array
+                                        (
+                                            [ID] => 14
+                                            [LID] => s2
+                                            [MODULE] => catalog
+                                            [PRODUCT_ID] => 3463
+                                            [QUANTITY] => 1.0000
+                                            [WEIGHT] => 
+                                            [DELAY] => N
+                                            [CAN_BUY] => Y
+                                            [PRICE] => 12369
+                                            [CUSTOM_PRICE] => Y
+                                            [BASE_PRICE] => 12369
+                                            [PRODUCT_PRICE_ID] => 
+                                            [PRICE_TYPE_ID] => 
+                                            [CURRENCY] => RUB
+                                            [BARCODE_MULTI] => N
+                                            [RESERVED] => N
+                                            [RESERVE_QUANTITY] => 
+                                            [NAME] => Двухстворчатое окно Grunder 60 мм Стандарт
+                                            [CATALOG_XML_ID] => 
+                                            [VAT_RATE] => 
+                                            [NOTES] => 
+                                            [DISCOUNT_PRICE] => 0
+                                            [PRODUCT_PROVIDER_CLASS] => 
+                                            [CALLBACK_FUNC] => 
+                                            [ORDER_CALLBACK_FUNC] => 
+                                            [PAY_CALLBACK_FUNC] => 
+                                            [CANCEL_CALLBACK_FUNC] => 
+                                            [DIMENSIONS] => 
+                                            [TYPE] => 
+                                            [SET_PARENT_ID] => 
+                                            [DETAIL_PAGE_URL] => 
+                                            [FUSER_ID] => 1
+                                            [MEASURE_CODE] => 
+                                            [MEASURE_NAME] => 
+                                            [ORDER_ID] => 
+                                            [DATE_INSERT] => Bitrix\Main\Type\DateTime Object
+                                                (
+                                                    [value:protected] => DateTime Object
+                                                        (
+                                                            [date] => 2026-04-13 13:45:48.000000
+                                                            [timezone_type] => 3
+                                                            [timezone] => Europe/Moscow
+                                                        )
+
+                                                    [userTimeEnabled:protected] => 1
+                                                )
+
+                                            [DATE_UPDATE] => Bitrix\Main\Type\DateTime Object
+                                                (
+                                                    [value:protected] => DateTime Object
+                                                        (
+                                                            [date] => 2026-04-13 13:46:04.000000
+                                                            [timezone_type] => 3
+                                                            [timezone] => Europe/Moscow
+                                                        )
+
+                                                    [userTimeEnabled:protected] => 1
+                                                )
+
+                                            [PRODUCT_XML_ID] => 
+                                            [SUBSCRIBE] => N
+                                            [RECOMMENDATION] => 
+                                            [VAT_INCLUDED] => Y
+                                            [SORT] => 100
+                                            [DATE_REFRESH] => 
+                                            [DISCOUNT_NAME] => 
+                                            [DISCOUNT_VALUE] => 
+                                            [DISCOUNT_COUPON] => 
+                                            [XML_ID] => bx_69dcc95ca348e
+                                            [MARKING_CODE_GROUP] => 
+                                        )
+
+                                    [changedValues:protected] => Array
+                                        (
+                                        )
+
+                                    [originalValues:Bitrix\Sale\Internals\Fields:private] => Array
+                                        (
+                                        )
+
+                                    [customFields:Bitrix\Sale\Internals\Fields:private] => Array
+                                        (
+                                            [PRICE] => 1
+                                        )
+
+                                    [isClone:protected] => 
+                                )
+
+                            [eventName:protected] => 
+                            [collection:protected] => Bitrix\Sale\Basket Object
+ *RECURSION*
+                            [internalIndex:protected] => 0
+                            [isClone:protected] => 
+                            [propertyCollection:protected] => 
+                            [calculatedFields:protected] => Bitrix\Sale\Internals\Fields Object
+                                (
+                                    [values:protected] => Array
+                                        (
+                                        )
+
+                                    [changedValues:protected] => Array
+                                        (
+                                        )
+
+                                    [originalValues:Bitrix\Sale\Internals\Fields:private] => Array
+                                        (
+                                        )
+
+                                    [customFields:Bitrix\Sale\Internals\Fields:private] => Array
+                                        (
+                                        )
+
+                                    [isClone:protected] => 
+                                )
+
+                            [provider:protected] => 
+                            [internalId:protected] => 14
+                            [bundleCollection:Bitrix\Sale\BasketItem:private] => 
+                            [reserveQuantityCollection:protected] => 
+                        )
+
+                    [1] => Bitrix\Sale\BasketItem Object
+ *RECURSION*
+                )
+
+            [index:Bitrix\Sale\Internals\EntityCollection:private] => 1
+            [isClone:protected] => 
+            [anyItemDeleted:protected] => 
+            [anyItemAdded:protected] => 1
+            [siteId:protected] => s2
+            [fUserId:protected] => 1
+            [order:protected] => 
+            [basketItemIndexMap:protected] => Array
+                (
+                    [14] => 0
+                    [n1] => 1
+                )
+
+            [maxItemSort:protected] => 100
+            [isLoadForFUserId:Bitrix\Sale\BasketBase:private] => 1
+            [isSaveExecuting:protected] => 
+        )
+
+    [internalIndex:protected] => 1
+    [isClone:protected] => 
+    [propertyCollection:protected] => Bitrix\Sale\BasketPropertiesCollection Object
+        (
+            [collection:protected] => Array
+                (
+                    [0] => Bitrix\Sale\BasketPropertyItem Object
+                        (
+                            [fields:protected] => Bitrix\Sale\Internals\Fields Object
+                                (
+                                    [values:protected] => Array
+                                        (
+                                            [XML_ID] => bx_69dcc9f503d7c
+                                            [NAME] => positionId
+                                            [CODE] => positionId
+                                            [VALUE] => 2
+                                        )
+
+                                    [changedValues:protected] => Array
+                                        (
+                                            [XML_ID] => 1
+                                            [NAME] => 1
+                                            [CODE] => 1
+                                            [VALUE] => 1
+                                        )
+
+                                    [originalValues:Bitrix\Sale\Internals\Fields:private] => Array
+                                        (
+                                            [XML_ID] => 
+                                            [NAME] => 
+                                            [CODE] => 
+                                            [VALUE] => 
+                                        )
+
+                                    [customFields:Bitrix\Sale\Internals\Fields:private] => Array
+                                        (
+                                        )
+
+                                    [isClone:protected] => 
+                                )
+
+                            [eventName:protected] => SaleBasketPropertyItem
+                            [collection:protected] => Bitrix\Sale\BasketPropertiesCollection Object
+ *RECURSION*
+                            [internalIndex:protected] => 0
+                            [isClone:protected] => 
+                        )
+
+                )
+
+            [index:Bitrix\Sale\Internals\EntityCollection:private] => 0
+            [isClone:protected] => 
+            [anyItemDeleted:protected] => 
+            [anyItemAdded:protected] => 1
+            [basketItem:protected] => Bitrix\Sale\BasketItem Object
+ *RECURSION*
+        )
+
+    [calculatedFields:protected] => Bitrix\Sale\Internals\Fields Object
+        (
+            [values:protected] => Array
+                (
+                )
+
+            [changedValues:protected] => Array
+                (
+                )
+
+            [originalValues:Bitrix\Sale\Internals\Fields:private] => Array
+                (
+                )
+
+            [customFields:Bitrix\Sale\Internals\Fields:private] => Array
+                (
+                )
+
+            [isClone:protected] => 
+        )
+
+    [provider:protected] => 
+    [internalId:protected] => n1
+    [bundleCollection:Bitrix\Sale\BasketItem:private] => 
+    [reserveQuantityCollection:protected] => 
+)

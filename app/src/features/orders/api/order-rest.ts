@@ -660,7 +660,9 @@ export const registerOrGetUser = async (form: OrderCustomerForm): Promise<string
 export const saveRemoteOrder = async ({ orderId, payload }: SaveRemoteOrderParams): Promise<{ orderId: string; response: unknown }> => {
   const isExistingOrder = Boolean(orderId);
   const label = isExistingOrder ? 'order_refresh' : 'order_create';
-  const path = isExistingOrder ? LOCAL_AJAX_PATHS.refreshOrder : LOCAL_AJAX_PATHS.addOrder;
+  const path = isExistingOrder
+    ? `${LOCAL_AJAX_PATHS.refreshOrder}&order_id=${encodeURIComponent(String(orderId))}`
+    : LOCAL_AJAX_PATHS.addOrder;
   const response = await postLocalAjaxJson({ label, path, payload });
 
   return {

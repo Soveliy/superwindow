@@ -1,0 +1,173 @@
+Array
+(
+    [GET] => Array
+        (
+            [action] => product_add
+        )
+
+    [JSON] => Array
+        (
+            [source] => calculator
+            [action] => product_add
+            [orderId] => new
+            [positionId] => 1
+            [dimensions] => Array
+                (
+                    [widthMm] => 1300
+                    [heightMm] => 1400
+                    [label] => 1300 x 1400 мм
+                )
+
+            [totalPrice] => 12369
+            [totalPriceLabel] => 12 369,00 ₽
+            [labels] => Array
+                (
+                    [openingTypeLabel] => Двухстворчатое окно
+                    [profileLabel] => Grunder 60 мм
+                    [packageLabel] => Стандарт
+                    [sealColorLabel] => Черный
+                    [drainageLabel] => Снизу
+                    [windowColorSideLabel] => В массе
+                    [windowColorLabel] => Белый
+                    [handleTypeLabel] => Стандарт
+                    [handleColorLabel] => Белый
+                    [mullionOrientationLabel] => Вертикальные импосты
+                    [mullionOffsetsLabel] => Array
+                        (
+                            [0] => Импост 1: 650 мм / 650 мм
+                        )
+
+                    [additionalOptions] => Array
+                        (
+                        )
+
+                )
+
+            [values] => Array
+                (
+                    [positionId] => 1
+                    [widthMm] => 1300
+                    [heightMm] => 1400
+                    [totalPrice] => 12369
+                    [openingType] => double
+                    [profileId] => grunder-60
+                    [packageType] => standard
+                    [sealColor] => black
+                    [drainage] => bottom
+                    [windowColorSide] => solid
+                    [windowColor] => white
+                    [handleType] => standard
+                    [handleColor] => white
+                    [mullionOrientation] => vertical
+                    [mullionOffsets] => Array
+                        (
+                            [1] => 650
+                        )
+
+                    [mullions] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [index] => 1
+                                    [leftMm] => 650
+                                    [rightMm] => 650
+                                    [leftPartMm] => 650
+                                    [rightPartMm] => 650
+                                    [leftLabel] => Левая часть: 650 мм
+                                    [rightLabel] => Правая часть: 650 мм
+                                )
+
+                        )
+
+                    [additionalOptions] => Array
+                        (
+                        )
+
+                    [rawDraft] => Array
+                        (
+                            [width] => 1300
+                            [height] => 1400
+                            [packageType] => standard
+                            [openingType] => double
+                            [profileId] => grunder-60
+                            [drainage] => bottom
+                            [sealColor] => black
+                            [windowColorSide] => solid
+                            [windowColor] => white
+                            [handleType] => standard
+                            [handleColor] => white
+                            [mullionOrientation] => vertical
+                            [mullionOffsets] => Array
+                                (
+                                    [1] => 650
+                                )
+
+                            [additionalOptions] => Array
+                                (
+                                )
+
+                        )
+
+                    [rawPosition] => Array
+                        (
+                            [id] => 1
+                            [width] => 1300
+                            [height] => 1400
+                            [price] => 12369
+                            [packageType] => standard
+                            [openingType] => double
+                            [profileId] => grunder-60
+                            [drainage] => bottom
+                            [sealColor] => black
+                            [windowColorSide] => solid
+                            [windowColor] => white
+                            [handleType] => standard
+                            [handleColor] => white
+                            [mullionOrientation] => vertical
+                            [mullionOffsets] => Array
+                                (
+                                    [1] => 650
+                                )
+
+                            [additionalOptions] => Array
+                                (
+                                )
+
+                        )
+
+                    [rawPositions] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 1
+                                    [width] => 1300
+                                    [height] => 1400
+                                    [price] => 12369
+                                    [packageType] => standard
+                                    [openingType] => double
+                                    [profileId] => grunder-60
+                                    [drainage] => bottom
+                                    [sealColor] => black
+                                    [windowColorSide] => solid
+                                    [windowColor] => white
+                                    [handleType] => standard
+                                    [handleColor] => white
+                                    [mullionOrientation] => vertical
+                                    [mullionOffsets] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                    [additionalOptions] => Array
+                                        (
+                                        )
+
+                                )
+
+                        )
+
+                )
+
+        )
+
+)

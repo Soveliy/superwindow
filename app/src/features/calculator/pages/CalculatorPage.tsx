@@ -40,6 +40,8 @@ import {
   readCalculatorPositions,
   writeCalculatorPositions,
 } from '@/features/calculator/model/positions.storage';
+import { type OrderService } from '@/features/orders/model/orders.mock';
+import { type OrderCustomerForm } from '@/features/orders/model/orders.storage';
 import { LOCAL_AJAX_PATHS, postLocalAjaxJson } from '@/shared/api/local-ajax';
 import { cn } from '@/shared/lib/cn';
 import { formatCurrency } from '@/shared/lib/format';
@@ -51,6 +53,8 @@ interface CalculatorLocationState {
   positionId?: number;
   resetPositions?: boolean;
   returnTo?: string;
+  draftForm?: OrderCustomerForm;
+  draftServices?: OrderService[];
 }
 
 interface DraftState {
@@ -543,6 +547,12 @@ export const CalculatorPage = () => {
   const mullionPreviewRef = useRef<HTMLDivElement | null>(null);
   const mullionDragStateRef = useRef<{ pointerId: number; index: number } | null>(null);
 
+  const buildReturnState = (nextPositions?: CalculatorPosition[]) => ({
+    calculatorPositions: nextPositions,
+    draftForm: state?.draftForm,
+    draftServices: state?.draftServices,
+  });
+
   useEffect(() => {
     const storedPositions = state?.resetPositions ? [] : readCalculatorPositions();
     const nextPositionId =
@@ -1021,7 +1031,7 @@ export const CalculatorPage = () => {
         values,
       },
     });
-    navigate(returnTo, { state: { calculatorPositions: nextPositions } });
+    navigate(returnTo, { state: buildReturnState(nextPositions) });
   };
 
   return (
@@ -1031,7 +1041,7 @@ export const CalculatorPage = () => {
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => navigate(returnTo)}
+              onClick={() => navigate(returnTo, { state: buildReturnState() })}
               className="justify-self-start rounded-0 text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -1042,7 +1052,7 @@ export const CalculatorPage = () => {
             </div>
             <button
               type="button"
-              onClick={() => navigate(returnTo)}
+              onClick={() => navigate(returnTo, { state: buildReturnState() })}
               className="px-2 text-sm font-semibold text-slate-500 hover:text-ink-700"
             >
               Отмена

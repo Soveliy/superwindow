@@ -1,0 +1,348 @@
+Array
+(
+    [GET] => Array
+        (
+            [action] => order_create
+        )
+
+    [RAW] => {"source":"order-details","action":"order_create","orderId":"ORD-785","order":{"id":"ORD-785","code":"SW-785","customerName":"Test Test","phone":"+7 (111) 111-11-11","address":"aaaaaaaaaaa","status":"new","statusLabel":"Расчет","comment":"fffffffffff","amount":40147,"amountLabel":"40 147,00 ₽","measurementDate":"2026-04-09","measurementDateLabel":"09.04.2026 - 14.04.2026","productionDate":"2026-04-18","productionDateLabel":"18.04.2026","installationDate":"2026-04-24","installationDateLabel":"24.04.2026 - 29.04.2026"},"summary":{"positionsCount":2,"servicesCount":2,"windowsTotal":25407,"windowsTotalLabel":"25 407,00 ₽","servicesTotal":14740,"servicesTotalLabel":"14 740,00 ₽","totalArea":3.64,"totalAreaLabel":"3,64 м²","orderTotal":40147,"orderTotalLabel":"40 147,00 ₽"},"labels":{"orderStatusLabel":"Расчет","positions":[{"positionId":1,"title":"Позиция 1","index":1,"dimensionsLabel":"1300 x 1400 мм","priceLabel":"13 038,00 ₽","openingTypeLabel":"double_right_active","profileLabel":"grunder-60","packageLabel":"standard","additionalOptions":[]},{"positionId":2,"title":"Позиция 2","index":2,"dimensionsLabel":"1300 x 1400 мм","priceLabel":"12 369,00 ₽","openingTypeLabel":"double","profileLabel":"grunder-60","packageLabel":"standard","additionalOptions":[]}],"services":[{"type":"installation","typeLabel":"Монтаж (ГОСТ)","discount":0,"discountLabel":"0 ₽","totalAreaLabel":"3,64 м²","basePriceLabel":"12 740 ₽","finalPriceLabel":"12 740 ₽"},{"type":"delivery","typeLabel":"Доставка","deliveryModeLabel":"Стоимость вручную","price":2000,"priceLabel":"2 000 ₽"}]},"values":{"orderId":"ORD-785","orderCode":"SW-785","customer":{"fullName":"Test Test","phone":"+7 (111) 111-11-11","address":"aaaaaaaaaaa","contractNumber":"","measurementDate":"2026-04-09","productionDate":"2026-04-18","installationDate":"2026-04-24","comment":"fffffffffff"},"positions":[{"positionId":1,"index":1,"widthMm":1300,"heightMm":1400,"price":13038,"openingType":"double_right_active","profileId":"grunder-60","packageType":"standard","sealColor":"black","drainage":"bottom","windowColorSide":"solid","windowColor":"white","handleType":"standard","handleColor":"white","mullionOrientation":"vertical","mullionOffsets":{"1":650},"additionalOptions":[],"rawPosition":{"id":1,"width":1300,"height":1400,"price":13038,"openingType":"double_right_active","profileId":"grunder-60","packageType":"standard","sealColor":"black","drainage":"bottom","windowColorSide":"solid","windowColor":"white","handleType":"standard","handleColor":"white","mullionOrientation":"vertical","mullionOffsets":{"1":650}}},{"positionId":2,"index":2,"widthMm":1300,"heightMm":1400,"price":12369,"openingType":"double","profileId":"grunder-60","packageType":"standard","sealColor":"black","drainage":"bottom","windowColorSide":"solid","windowColor":"white","handleType":"standard","handleColor":"white","mullionOrientation":"vertical","mullionOffsets":{"1":650},"additionalOptions":[],"rawPosition":{"id":2,"width":1300,"height":1400,"price":12369,"openingType":"double","profileId":"grunder-60","packageType":"standard","sealColor":"black","drainage":"bottom","windowColorSide":"solid","windowColor":"white","handleType":"standard","handleColor":"white","mullionOrientation":"vertical","mullionOffsets":{"1":650}}}],"services":[{"type":"installation","discount":0,"totalArea":3.64,"basePricePerSquare":3500,"basePrice":12740,"finalPrice":12740},{"type":"delivery","deliveryMode":"manual","price":2000}],"totals":{"windowsTotal":25407,"servicesTotal":14740,"totalArea":3.64,"orderTotal":40147},"rawForm":{"fullName":"Test Test","phone":"+7 (111) 111-11-11","address":"aaaaaaaaaaa","contractNumber":"","measurementDate":"2026-04-09","productionDate":"2026-04-18","installationDate":"2026-04-24","comment":"fffffffffff"},"rawPositions":[{"id":1,"width":1300,"height":1400,"price":13038,"openingType":"double_right_active","profileId":"grunder-60","packageType":"standard","sealColor":"black","drainage":"bottom","windowColorSide":"solid","windowColor":"white","handleType":"standard","handleColor":"white","mullionOrientation":"vertical","mullionOffsets":{"1":650}},{"id":2,"width":1300,"height":1400,"price":12369,"openingType":"double","profileId":"grunder-60","packageType":"standard","sealColor":"black","drainage":"bottom","windowColorSide":"solid","windowColor":"white","handleType":"standard","handleColor":"white","mullionOrientation":"vertical","mullionOffsets":{"1":650}}],"rawServices":[{"type":"installation","discount":0},{"type":"delivery","mode":"manual","price":2000}]},"savedAt":"2026-04-15T13:33:11.921Z"}
+    [JSON] => Array
+        (
+            [source] => order-details
+            [action] => order_create
+            [orderId] => ORD-785
+            [order] => Array
+                (
+                    [id] => ORD-785
+                    [code] => SW-785
+                    [customerName] => Test Test
+                    [phone] => +7 (111) 111-11-11
+                    [address] => aaaaaaaaaaa
+                    [status] => new
+                    [statusLabel] => Расчет
+                    [comment] => fffffffffff
+                    [amount] => 40147
+                    [amountLabel] => 40 147,00 ₽
+                    [measurementDate] => 2026-04-09
+                    [measurementDateLabel] => 09.04.2026 - 14.04.2026
+                    [productionDate] => 2026-04-18
+                    [productionDateLabel] => 18.04.2026
+                    [installationDate] => 2026-04-24
+                    [installationDateLabel] => 24.04.2026 - 29.04.2026
+                )
+
+            [summary] => Array
+                (
+                    [positionsCount] => 2
+                    [servicesCount] => 2
+                    [windowsTotal] => 25407
+                    [windowsTotalLabel] => 25 407,00 ₽
+                    [servicesTotal] => 14740
+                    [servicesTotalLabel] => 14 740,00 ₽
+                    [totalArea] => 3.64
+                    [totalAreaLabel] => 3,64 м²
+                    [orderTotal] => 40147
+                    [orderTotalLabel] => 40 147,00 ₽
+                )
+
+            [labels] => Array
+                (
+                    [orderStatusLabel] => Расчет
+                    [positions] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [positionId] => 1
+                                    [title] => Позиция 1
+                                    [index] => 1
+                                    [dimensionsLabel] => 1300 x 1400 мм
+                                    [priceLabel] => 13 038,00 ₽
+                                    [openingTypeLabel] => double_right_active
+                                    [profileLabel] => grunder-60
+                                    [packageLabel] => standard
+                                    [additionalOptions] => Array
+                                        (
+                                        )
+
+                                )
+
+                            [1] => Array
+                                (
+                                    [positionId] => 2
+                                    [title] => Позиция 2
+                                    [index] => 2
+                                    [dimensionsLabel] => 1300 x 1400 мм
+                                    [priceLabel] => 12 369,00 ₽
+                                    [openingTypeLabel] => double
+                                    [profileLabel] => grunder-60
+                                    [packageLabel] => standard
+                                    [additionalOptions] => Array
+                                        (
+                                        )
+
+                                )
+
+                        )
+
+                    [services] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [type] => installation
+                                    [typeLabel] => Монтаж (ГОСТ)
+                                    [discount] => 0
+                                    [discountLabel] => 0 ₽
+                                    [totalAreaLabel] => 3,64 м²
+                                    [basePriceLabel] => 12 740 ₽
+                                    [finalPriceLabel] => 12 740 ₽
+                                )
+
+                            [1] => Array
+                                (
+                                    [type] => delivery
+                                    [typeLabel] => Доставка
+                                    [deliveryModeLabel] => Стоимость вручную
+                                    [price] => 2000
+                                    [priceLabel] => 2 000 ₽
+                                )
+
+                        )
+
+                )
+
+            [values] => Array
+                (
+                    [orderId] => ORD-785
+                    [orderCode] => SW-785
+                    [customer] => Array
+                        (
+                            [fullName] => Test Test
+                            [phone] => +7 (111) 111-11-11
+                            [address] => aaaaaaaaaaa
+                            [contractNumber] => 
+                            [measurementDate] => 2026-04-09
+                            [productionDate] => 2026-04-18
+                            [installationDate] => 2026-04-24
+                            [comment] => fffffffffff
+                        )
+
+                    [positions] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [positionId] => 1
+                                    [index] => 1
+                                    [widthMm] => 1300
+                                    [heightMm] => 1400
+                                    [price] => 13038
+                                    [openingType] => double_right_active
+                                    [profileId] => grunder-60
+                                    [packageType] => standard
+                                    [sealColor] => black
+                                    [drainage] => bottom
+                                    [windowColorSide] => solid
+                                    [windowColor] => white
+                                    [handleType] => standard
+                                    [handleColor] => white
+                                    [mullionOrientation] => vertical
+                                    [mullionOffsets] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                    [additionalOptions] => Array
+                                        (
+                                        )
+
+                                    [rawPosition] => Array
+                                        (
+                                            [id] => 1
+                                            [width] => 1300
+                                            [height] => 1400
+                                            [price] => 13038
+                                            [openingType] => double_right_active
+                                            [profileId] => grunder-60
+                                            [packageType] => standard
+                                            [sealColor] => black
+                                            [drainage] => bottom
+                                            [windowColorSide] => solid
+                                            [windowColor] => white
+                                            [handleType] => standard
+                                            [handleColor] => white
+                                            [mullionOrientation] => vertical
+                                            [mullionOffsets] => Array
+                                                (
+                                                    [1] => 650
+                                                )
+
+                                        )
+
+                                )
+
+                            [1] => Array
+                                (
+                                    [positionId] => 2
+                                    [index] => 2
+                                    [widthMm] => 1300
+                                    [heightMm] => 1400
+                                    [price] => 12369
+                                    [openingType] => double
+                                    [profileId] => grunder-60
+                                    [packageType] => standard
+                                    [sealColor] => black
+                                    [drainage] => bottom
+                                    [windowColorSide] => solid
+                                    [windowColor] => white
+                                    [handleType] => standard
+                                    [handleColor] => white
+                                    [mullionOrientation] => vertical
+                                    [mullionOffsets] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                    [additionalOptions] => Array
+                                        (
+                                        )
+
+                                    [rawPosition] => Array
+                                        (
+                                            [id] => 2
+                                            [width] => 1300
+                                            [height] => 1400
+                                            [price] => 12369
+                                            [openingType] => double
+                                            [profileId] => grunder-60
+                                            [packageType] => standard
+                                            [sealColor] => black
+                                            [drainage] => bottom
+                                            [windowColorSide] => solid
+                                            [windowColor] => white
+                                            [handleType] => standard
+                                            [handleColor] => white
+                                            [mullionOrientation] => vertical
+                                            [mullionOffsets] => Array
+                                                (
+                                                    [1] => 650
+                                                )
+
+                                        )
+
+                                )
+
+                        )
+
+                    [services] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [type] => installation
+                                    [discount] => 0
+                                    [totalArea] => 3.64
+                                    [basePricePerSquare] => 3500
+                                    [basePrice] => 12740
+                                    [finalPrice] => 12740
+                                )
+
+                            [1] => Array
+                                (
+                                    [type] => delivery
+                                    [deliveryMode] => manual
+                                    [price] => 2000
+                                )
+
+                        )
+
+                    [totals] => Array
+                        (
+                            [windowsTotal] => 25407
+                            [servicesTotal] => 14740
+                            [totalArea] => 3.64
+                            [orderTotal] => 40147
+                        )
+
+                    [rawForm] => Array
+                        (
+                            [fullName] => Test Test
+                            [phone] => +7 (111) 111-11-11
+                            [address] => aaaaaaaaaaa
+                            [contractNumber] => 
+                            [measurementDate] => 2026-04-09
+                            [productionDate] => 2026-04-18
+                            [installationDate] => 2026-04-24
+                            [comment] => fffffffffff
+                        )
+
+                    [rawPositions] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 1
+                                    [width] => 1300
+                                    [height] => 1400
+                                    [price] => 13038
+                                    [openingType] => double_right_active
+                                    [profileId] => grunder-60
+                                    [packageType] => standard
+                                    [sealColor] => black
+                                    [drainage] => bottom
+                                    [windowColorSide] => solid
+                                    [windowColor] => white
+                                    [handleType] => standard
+                                    [handleColor] => white
+                                    [mullionOrientation] => vertical
+                                    [mullionOffsets] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                )
+
+                            [1] => Array
+                                (
+                                    [id] => 2
+                                    [width] => 1300
+                                    [height] => 1400
+                                    [price] => 12369
+                                    [openingType] => double
+                                    [profileId] => grunder-60
+                                    [packageType] => standard
+                                    [sealColor] => black
+                                    [drainage] => bottom
+                                    [windowColorSide] => solid
+                                    [windowColor] => white
+                                    [handleType] => standard
+                                    [handleColor] => white
+                                    [mullionOrientation] => vertical
+                                    [mullionOffsets] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                )
+
+                        )
+
+                    [rawServices] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [type] => installation
+                                    [discount] => 0
+                                )
+
+                            [1] => Array
+                                (
+                                    [type] => delivery
+                                    [mode] => manual
+                                    [price] => 2000
+                                )
+
+                        )
+
+                )
+
+            [savedAt] => 2026-04-15T13:33:11.921Z
+        )
+
+)
