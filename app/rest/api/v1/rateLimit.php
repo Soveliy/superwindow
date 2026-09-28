@@ -47,9 +47,12 @@ function rateLimit($limit = 100, $seconds = 60)
 function basicFilter()
 {
     // если пустой User-Agent - почти всегда бот
-    if (empty($_SERVER['HTTP_USER_AGENT'])) {
+    if (empty($_SERVER['HTTP_USER_AGENT']) && empty($_SERVER['HTTP_X_API_KEY']) && PHP_SAPI !== 'cli') {
         http_response_code(403);
-        exit;
+        exit(json_encode([
+            'success' => false,
+            'error' => ['code' => 'user_agent_required', 'message' => 'User-Agent header is required'],
+        ], JSON_UNESCAPED_UNICODE));
     }
 
     // только JSON/ajax

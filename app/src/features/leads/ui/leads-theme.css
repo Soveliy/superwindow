@@ -1,0 +1,11 @@
+:root[data-theme='light'] .leads-page {
+  --color-slate-50: 247 248 250;
+  --color-ink-800: 5 38 75;
+  --color-brand-100: 215 226 240;
+  --color-brand-200: 175 200 244;
+  --color-error: 210 0 0;
+}
+
+.leads-page .text-white {
+  color: #fff;
+}

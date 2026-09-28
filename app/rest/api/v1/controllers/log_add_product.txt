@@ -10,7 +10,129 @@ Array
             [source] => calculator
             [action] => product_add
             [orderId] => new
-            [positionId] => 1
+            [positionId] => 2
+            [query] => Array
+                (
+                    [type_id] => 346
+                    [width] => 1300
+                    [height] => 1400
+                    [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+                    [color] => Белый
+                    [mullionOffset] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [1] => 650
+                                )
+
+                        )
+
+                    [parameters] => Array
+                        (
+                            [sealColor] => Черный
+                            [drainage] => СНИЗУ
+                        )
+
+                    [contours] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 2
+                                    [parameters] => Array
+                                        (
+                                            [0] => Array
+                                                (
+                                                    [ТИП РУЧКИ] =>   ОКОННАЯ
+                                                )
+
+                                        )
+
+                                )
+
+                        )
+
+                )
+
+            [productionQuery] => Array
+                (
+                    [type_id] => 346
+                    [width] => 1300
+                    [height] => 1400
+                    [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+                    [color] => Белый
+                    [mullionOffset] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [1] => 650
+                                )
+
+                        )
+
+                    [parameters] => Array
+                        (
+                            [sealColor] => Черный
+                            [drainage] => СНИЗУ
+                        )
+
+                    [contours] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 2
+                                    [parameters] => Array
+                                        (
+                                            [0] => Array
+                                                (
+                                                    [ТИП РУЧКИ] =>   ОКОННАЯ
+                                                )
+
+                                        )
+
+                                )
+
+                        )
+
+                )
+
+            [type_id] => 346
+            [width] => 1300
+            [height] => 1400
+            [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+            [color] => Белый
+            [mullionOffset] => Array
+                (
+                    [0] => Array
+                        (
+                            [1] => 650
+                        )
+
+                )
+
+            [parameters] => Array
+                (
+                    [sealColor] => Черный
+                    [drainage] => СНИЗУ
+                )
+
+            [contours] => Array
+                (
+                    [0] => Array
+                        (
+                            [id] => 2
+                            [parameters] => Array
+                                (
+                                    [0] => Array
+                                        (
+                                            [ТИП РУЧКИ] =>   ОКОННАЯ
+                                        )
+
+                                )
+
+                        )
+
+                )
+
             [dimensions] => Array
                 (
                     [widthMm] => 1300
@@ -18,18 +140,18 @@ Array
                     [label] => 1300 x 1400 мм
                 )
 
-            [totalPrice] => 12369
-            [totalPriceLabel] => 12 369,00 ₽
+            [totalPrice] => 19022.98
+            [totalPriceLabel] => 13 038,00 ₽
             [labels] => Array
                 (
-                    [openingTypeLabel] => Двухстворчатое окно
+                    [openingTypeLabel] => Двухстворчатое окно (активная правая)
                     [profileLabel] => Grunder 60 мм
                     [packageLabel] => Стандарт
                     [sealColorLabel] => Черный
                     [drainageLabel] => Снизу
-                    [windowColorSideLabel] => В массе
+                    [windowColorSideLabel] => Снаружи
                     [windowColorLabel] => Белый
-                    [handleTypeLabel] => Стандарт
+                    [handleTypeLabel] => ACCADO
                     [handleColorLabel] => Белый
                     [mullionOrientationLabel] => Вертикальные импосты
                     [mullionOffsetsLabel] => Array
@@ -45,16 +167,16 @@ Array
 
             [values] => Array
                 (
-                    [positionId] => 1
+                    [positionId] => 2
                     [widthMm] => 1300
                     [heightMm] => 1400
-                    [totalPrice] => 12369
-                    [openingType] => double
+                    [totalPrice] => 19022.98
+                    [openingType] => double_right_active
                     [profileId] => grunder-60
                     [packageType] => standard
                     [sealColor] => black
                     [drainage] => bottom
-                    [windowColorSide] => solid
+                    [windowColorSide] => outside
                     [windowColor] => white
                     [handleType] => standard
                     [handleColor] => white
@@ -79,6 +201,90 @@ Array
 
                         )
 
+                    [productionQuery] => Array
+                        (
+                            [type_id] => 346
+                            [width] => 1300
+                            [height] => 1400
+                            [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+                            [color] => Белый
+                            [mullionOffset] => Array
+                                (
+                                    [0] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                )
+
+                            [parameters] => Array
+                                (
+                                    [sealColor] => Черный
+                                    [drainage] => СНИЗУ
+                                )
+
+                            [contours] => Array
+                                (
+                                    [0] => Array
+                                        (
+                                            [id] => 2
+                                            [parameters] => Array
+                                                (
+                                                    [0] => Array
+                                                        (
+                                                            [ТИП РУЧКИ] =>   ОКОННАЯ
+                                                        )
+
+                                                )
+
+                                        )
+
+                                )
+
+                        )
+
+                    [query] => Array
+                        (
+                            [type_id] => 346
+                            [width] => 1300
+                            [height] => 1400
+                            [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+                            [color] => Белый
+                            [mullionOffset] => Array
+                                (
+                                    [0] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                )
+
+                            [parameters] => Array
+                                (
+                                    [sealColor] => Черный
+                                    [drainage] => СНИЗУ
+                                )
+
+                            [contours] => Array
+                                (
+                                    [0] => Array
+                                        (
+                                            [id] => 2
+                                            [parameters] => Array
+                                                (
+                                                    [0] => Array
+                                                        (
+                                                            [ТИП РУЧКИ] =>   ОКОННАЯ
+                                                        )
+
+                                                )
+
+                                        )
+
+                                )
+
+                        )
+
                     [additionalOptions] => Array
                         (
                         )
@@ -88,11 +294,11 @@ Array
                             [width] => 1300
                             [height] => 1400
                             [packageType] => standard
-                            [openingType] => double
+                            [openingType] => double_right_active
                             [profileId] => grunder-60
                             [drainage] => bottom
                             [sealColor] => black
-                            [windowColorSide] => solid
+                            [windowColorSide] => outside
                             [windowColor] => white
                             [handleType] => standard
                             [handleColor] => white
@@ -110,16 +316,16 @@ Array
 
                     [rawPosition] => Array
                         (
-                            [id] => 1
+                            [id] => 2
                             [width] => 1300
                             [height] => 1400
-                            [price] => 12369
+                            [price] => 13038
                             [packageType] => standard
-                            [openingType] => double
+                            [openingType] => double_right_active
                             [profileId] => grunder-60
                             [drainage] => bottom
                             [sealColor] => black
-                            [windowColorSide] => solid
+                            [windowColorSide] => outside
                             [windowColor] => white
                             [handleType] => standard
                             [handleColor] => white
@@ -133,6 +339,48 @@ Array
                                 (
                                 )
 
+                            [productionQuery] => Array
+                                (
+                                    [type_id] => 346
+                                    [width] => 1300
+                                    [height] => 1400
+                                    [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+                                    [color] => Белый
+                                    [mullionOffset] => Array
+                                        (
+                                            [0] => Array
+                                                (
+                                                    [1] => 650
+                                                )
+
+                                        )
+
+                                    [parameters] => Array
+                                        (
+                                            [sealColor] => Черный
+                                            [drainage] => СНИЗУ
+                                        )
+
+                                    [contours] => Array
+                                        (
+                                            [0] => Array
+                                                (
+                                                    [id] => 2
+                                                    [parameters] => Array
+                                                        (
+                                                            [0] => Array
+                                                                (
+                                                                    [ТИП РУЧКИ] =>   ОКОННАЯ
+                                                                )
+
+                                                        )
+
+                                                )
+
+                                        )
+
+                                )
+
                         )
 
                     [rawPositions] => Array
@@ -142,13 +390,78 @@ Array
                                     [id] => 1
                                     [width] => 1300
                                     [height] => 1400
-                                    [price] => 12369
+                                    [price] => 19022
+                                    [openingType] => double_left_active
+                                    [profileId] => grunder-60
                                     [packageType] => standard
-                                    [openingType] => double
+                                    [sealColor] => black
+                                    [drainage] => bottom
+                                    [windowColorSide] => outside
+                                    [windowColor] => white
+                                    [handleType] => standard
+                                    [handleColor] => white
+                                    [mullionOrientation] => vertical
+                                    [mullionOffsets] => Array
+                                        (
+                                            [1] => 650
+                                        )
+
+                                    [productionQuery] => Array
+                                        (
+                                            [type_id] => 347
+                                            [width] => 1300
+                                            [height] => 1400
+                                            [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+                                            [color] => Белый
+                                            [mullionOffset] => Array
+                                                (
+                                                    [0] => Array
+                                                        (
+                                                            [1] => 650
+                                                        )
+
+                                                )
+
+                                            [parameters] => Array
+                                                (
+                                                    [sealColor] => Черный
+                                                    [drainage] => СНИЗУ
+                                                )
+
+                                            [contours] => Array
+                                                (
+                                                    [0] => Array
+                                                        (
+                                                            [id] => 2
+                                                            [parameters] => Array
+                                                                (
+                                                                    [0] => Array
+                                                                        (
+                                                                            [ТИП РУЧКИ] =>   ОКОННАЯ
+                                                                        )
+
+                                                                )
+
+                                                        )
+
+                                                )
+
+                                        )
+
+                                )
+
+                            [1] => Array
+                                (
+                                    [id] => 2
+                                    [width] => 1300
+                                    [height] => 1400
+                                    [price] => 13038
+                                    [packageType] => standard
+                                    [openingType] => double_right_active
                                     [profileId] => grunder-60
                                     [drainage] => bottom
                                     [sealColor] => black
-                                    [windowColorSide] => solid
+                                    [windowColorSide] => outside
                                     [windowColor] => white
                                     [handleType] => standard
                                     [handleColor] => white
@@ -162,12 +475,161 @@ Array
                                         (
                                         )
 
+                                    [productionQuery] => Array
+                                        (
+                                            [type_id] => 346
+                                            [width] => 1300
+                                            [height] => 1400
+                                            [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+                                            [color] => Белый
+                                            [mullionOffset] => Array
+                                                (
+                                                    [0] => Array
+                                                        (
+                                                            [1] => 650
+                                                        )
+
+                                                )
+
+                                            [parameters] => Array
+                                                (
+                                                    [sealColor] => Черный
+                                                    [drainage] => СНИЗУ
+                                                )
+
+                                            [contours] => Array
+                                                (
+                                                    [0] => Array
+                                                        (
+                                                            [id] => 2
+                                                            [parameters] => Array
+                                                                (
+                                                                    [0] => Array
+                                                                        (
+                                                                            [ТИП РУЧКИ] =>   ОКОННАЯ
+                                                                        )
+
+                                                                )
+
+                                                        )
+
+                                                )
+
+                                        )
+
                                 )
 
                         )
 
                 )
 
+        )
+
+    [PRODUCTION_QUERY] => Array
+        (
+            [type_id] => 346
+            [width] => 1300
+            [height] => 1400
+            [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+            [color] => Белый
+            [mullionOffset] => Array
+                (
+                    [0] => Array
+                        (
+                            [1] => 650
+                        )
+
+                )
+
+            [parameters] => Array
+                (
+                    [sealColor] => Черный
+                    [drainage] => СНИЗУ
+                )
+
+            [contours] => Array
+                (
+                    [0] => Array
+                        (
+                            [id] => 2
+                            [parameters] => Array
+                                (
+                                    [0] => Array
+                                        (
+                                            [ТИП РУЧКИ] =>   ОКОННАЯ
+                                        )
+
+                                )
+
+                        )
+
+                )
+
+        )
+
+    [INVITECRAFT_PRICE] => Array
+        (
+            [success] => 1
+            [price] => 19022.98
+            [amount] => 19022.98
+            [response] => Array
+                (
+                    [status] => success
+                    [price] => 19022.98
+                )
+
+            [request] => Array
+                (
+                    [command] => calculation
+                    [type_id] => 346
+                    [width] => 1300
+                    [height] => 1400
+                    [system_id] => /_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60
+                    [color] => Белый
+                    [mullions] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [1] => 650
+                                )
+
+                        )
+
+                    [parameters] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [Цвет уплотнения] => Черный
+                                )
+
+                            [1] => Array
+                                (
+                                    [ДРЕНАЖ.ОТВЕРСТ. РАМА] => СНИЗУ
+                                )
+
+                        )
+
+                    [contours] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 2
+                                    [parameters] => Array
+                                        (
+                                            [0] => Array
+                                                (
+                                                    [ТИП РУЧКИ] =>   ОКОННАЯ
+                                                )
+
+                                        )
+
+                                )
+
+                        )
+
+                )
+
+            [httpCode] => 200
         )
 
 )

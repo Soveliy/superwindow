@@ -1,6 +1,10 @@
 import {
+  isCalculatorPosition,
+  normalizeCalculatorProductionQuery,
   normalizeCalculatorPosition,
   type CalculatorPosition,
+  type CalculatorSashConfig,
+  type DripColor,
   type DrainageType,
   type HandleColor,
   type HandleType,
@@ -8,13 +12,17 @@ import {
   type OpeningType,
   type PackageType,
   type SealColor,
+  type SashId,
+  type SillType,
   type SillColor,
   type WindowColor,
   type WindowColorSide,
 } from '@/features/calculator/model/positions.storage';
 import { type OrderStatus, type OrderService, type OrderSummary } from '@/features/orders/model/orders.mock';
 import { type OrderCustomerForm } from '@/features/orders/model/orders.storage';
-import { LOCAL_AJAX_PATHS, postLocalAjaxJson } from '@/shared/api/local-ajax';
+import { type OrderPaymentPayload } from '@/features/payment/model/payment-options';
+import { authStorage } from '@/features/auth/model/auth-storage';
+import { LOCAL_AJAX_PATHS, LocalAjaxError, postLocalAjaxJson } from '@/shared/api/local-ajax';
 
 interface SaveRemoteOrderParams {
   orderId?: string | null;
@@ -26,6 +34,23 @@ interface DeleteBasketItemParams {
   orderCode?: string | null;
   positionId?: number | null;
   serviceType?: OrderService['type'] | null;
+}
+
+export interface RemoteInvoiceResponse {
+  status: string | null;
+  invoiceNo: number | null;
+  orderCode: string | null;
+  amount: number | null;
+  customerId: string | null;
+  raw: unknown;
+}
+
+export interface RemoteInvoicePdfResponse {
+  invoiceNo: number;
+  pdfUrl: string | null;
+  fileName: string;
+  contentType: string | null;
+  raw: unknown;
 }
 
 export interface RemoteOrderSnapshot {
@@ -69,9 +94,12 @@ const drainageTypes = new Set<DrainageType>(['bottom', 'none', 'street']);
 const windowColorSides = new Set<WindowColorSide>(['outside', 'inside', 'solid']);
 const windowColors = new Set<WindowColor>(['white', 'anthracite', 'golden_oak', 'dark_oak', 'mahogany', 'silver']);
 const handleTypes = new Set<HandleType>(['standard', 'premium', 'design']);
-const handleColors = new Set<HandleColor>(['white', 'brown', 'silver', 'gold']);
+const handleColors = new Set<HandleColor>(['white', 'anthracite', 'brown', 'light_brown', 'black']);
 const mullionOrientations = new Set<MullionOrientation>(['vertical', 'horizontal']);
+const sillTypes = new Set<SillType>(['fineber', 'komfort']);
 const sillColors = new Set<SillColor>(['white', 'brown', 'anthracite']);
+const dripColors = new Set<DripColor>(['white', 'brown', 'gray']);
+const sashIds = new Set<SashId>(['single', 'left', 'center', 'right']);
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -206,6 +234,30 @@ const getEnumValue = <T extends string>(source: unknown, keys: readonly string[]
   return value && values.has(value as T) ? (value as T) : undefined;
 };
 
+const normalizeBoolean = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase();
+
+    if (['1', 'true', 'yes', 'y'].includes(normalizedValue)) {
+      return true;
+    }
+
+    if (['0', 'false', 'no', 'n'].includes(normalizedValue)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
 const normalizeOrderStatus = (value: unknown): OrderStatus => {
   const normalizedValue = normalizeString(value);
 
@@ -275,7 +327,6 @@ const extractRequiredId = (source: unknown, keys: readonly string[], entityLabel
     }
   }
 
-  console.warn(`[${entityLabel}] id is missing in response`, source);
   throw new Error(`${entityLabel} id is missing in response`);
 };
 
@@ -289,6 +340,59 @@ const parseJsonString = (value: unknown): unknown => {
   } catch {
     return null;
   }
+};
+
+const decodeArrayBufferText = (value: ArrayBuffer): string => {
+  try {
+    return new TextDecoder('utf-8').decode(value);
+  } catch {
+    return '';
+  }
+};
+
+const isPdfArrayBuffer = (value: ArrayBuffer): boolean => {
+  const bytes = new Uint8Array(value.slice(0, 4));
+  return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+};
+
+const normalizePdfUrl = (value: unknown): string | null => {
+  const directValue = normalizeString(value);
+
+  if (directValue) {
+    const compactValue = directValue.replace(/\s+/g, '');
+
+    if (/^(https?:|blob:|data:application\/pdf)/i.test(directValue)) {
+      return directValue;
+    }
+
+    if (/^JVBER/i.test(compactValue)) {
+      return `data:application/pdf;base64,${compactValue}`;
+    }
+  }
+
+  if (!isRecord(value) && !Array.isArray(value)) {
+    return null;
+  }
+
+  const linkedValue = getString(value, [
+    'pdf_url',
+    'pdfUrl',
+    'download_url',
+    'downloadUrl',
+    'file_url',
+    'fileUrl',
+    'url',
+    'href',
+    'link',
+  ]);
+  const linkedPdfUrl = normalizePdfUrl(linkedValue);
+
+  if (linkedPdfUrl) {
+    return linkedPdfUrl;
+  }
+
+  const base64Value = getString(value, ['pdf_base64', 'pdfBase64', 'base64', 'pdf', 'file', 'content', 'data']);
+  return normalizePdfUrl(base64Value);
 };
 
 const getItemProps = (source: unknown): UnknownRecord | null => {
@@ -415,7 +519,9 @@ const normalizeAdditionalOptions = (source: unknown): CalculatorPosition['additi
         type: normalizedType,
         length: getNumber(item, ['length', 'lengthMm', 'length_mm']) ?? undefined,
         width: getNumber(item, ['width', 'widthMm', 'width_mm']) ?? undefined,
-        sillColor: getEnumValue(item, ['sillColor', 'sill_color', 'color'], sillColors),
+        sillType: getEnumValue(item, ['sillType', 'sill_type'], sillTypes),
+        sillColor: normalizedType === 'sill' ? getEnumValue(item, ['sillColor', 'sill_color', 'color'], sillColors) : undefined,
+        dripColor: normalizedType === 'drip' ? getEnumValue(item, ['dripColor', 'drip_color', 'color'], dripColors) : undefined,
       };
 
       return nextItem;
@@ -423,6 +529,73 @@ const normalizeAdditionalOptions = (source: unknown): CalculatorPosition['additi
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
   return normalizedItems.length > 0 ? normalizedItems : undefined;
+};
+
+const normalizeSashId = (value: unknown): SashId | null => {
+  const normalizedValue = normalizeString(value);
+  return normalizedValue && sashIds.has(normalizedValue as SashId) ? (normalizedValue as SashId) : null;
+};
+
+const normalizeSashItems = (items: unknown[]): CalculatorSashConfig[] | undefined => {
+  const normalizedItems = items
+    .map((item): CalculatorSashConfig | null => {
+      if (isRecord(item)) {
+        const id = normalizeSashId(findFirstByKeys(item, ['id', 'sashId', 'sash_id']));
+
+        if (!id) {
+          return null;
+        }
+
+        const mosquitoScreenEnabled =
+          normalizeBoolean(
+            findFirstByKeys(item, ['mosquitoScreenEnabled', 'mosquito_screen_enabled', 'hasMosquitoScreen', 'enabled', 'active']),
+          ) ?? false;
+
+        return {
+          id,
+          mosquitoScreenEnabled,
+        };
+      }
+
+      const id = normalizeSashId(item);
+
+      if (!id) {
+        return null;
+      }
+
+      return {
+        id,
+        mosquitoScreenEnabled: true,
+      };
+    })
+    .filter((item): item is CalculatorSashConfig => item !== null);
+
+  return normalizedItems.length > 0 ? normalizedItems : undefined;
+};
+
+const normalizeSashes = (source: unknown): CalculatorPosition['sashes'] => {
+  const explicitValue = findFirstByKeys(source, ['sashes', 'sashConfigs', 'sash_configs']);
+  const parsedExplicitValue = parseJsonString(explicitValue);
+  const explicitItems = Array.isArray(explicitValue)
+    ? explicitValue
+    : Array.isArray(parsedExplicitValue)
+      ? parsedExplicitValue
+      : getArray(parsedExplicitValue, ['sashes', 'items']);
+  const explicitSashes = normalizeSashItems(explicitItems);
+
+  if (explicitSashes) {
+    return explicitSashes;
+  }
+
+  const screensValue = findFirstByKeys(source, ['mosquitoScreens', 'mosquito_screens']);
+  const parsedScreensValue = parseJsonString(screensValue);
+  const screenItems = Array.isArray(screensValue)
+    ? screensValue
+    : Array.isArray(parsedScreensValue)
+      ? parsedScreensValue
+      : getArray(parsedScreensValue, ['mosquitoScreens', 'mosquito_screens', 'items']);
+
+  return normalizeSashItems(screenItems);
 };
 
 const normalizePosition = (source: unknown, index: number): CalculatorPosition | null => {
@@ -438,24 +611,65 @@ const normalizePosition = (source: unknown, index: number): CalculatorPosition |
 
   const itemProps = getItemProps(source);
   const dimensions = parseDimensions(itemProps?.dimensions);
+  const persistedPositionSource = findFirstByKeys(source, ['rawPosition', 'raw_position']);
+  const parsedPersistedPosition = parseJsonString(persistedPositionSource);
+  const persistedPosition = isCalculatorPosition(parsedPersistedPosition)
+    ? normalizeCalculatorPosition(parsedPersistedPosition)
+    : null;
+  const additionalOptions = normalizeAdditionalOptions(source);
+  const sashes = normalizeSashes(source);
+  const resolvedPositionId =
+    getNumber(itemProps, ['positionId', 'position_id']) ??
+    persistedPosition?.id ??
+    getNumber(source, ['positionId', 'position_id']) ??
+    (itemProps ? null : getNumber(source, ['id'])) ??
+    index + 1;
 
   const rawPosition: CalculatorPosition = {
-    id: Math.max(1, Math.trunc(getNumber(source, ['positionId', 'position_id', 'id', 'basketId', 'basket_id']) ?? index + 1)),
-    width: getNumber(source, ['widthMm', 'width_mm', 'width']) ?? dimensions.width,
-    height: getNumber(source, ['heightMm', 'height_mm', 'height']) ?? dimensions.height,
-    price: getNumber(source, ['price', 'totalPrice', 'total_price', 'amount']) ?? undefined,
-    openingType: getEnumValue(source, ['openingType', 'opening_type'], openingTypes),
-    profileId: getString(source, ['profileId', 'profile_id']) ?? undefined,
-    packageType: parsePackageType(source),
-    sealColor: getEnumValue(source, ['sealColor', 'seal_color'], sealColors),
-    drainage: getEnumValue(source, ['drainage', 'drainageType', 'drainage_type'], drainageTypes),
-    windowColorSide: getEnumValue(source, ['windowColorSide', 'window_color_side'], windowColorSides),
-    windowColor: getEnumValue(source, ['windowColor', 'window_color'], windowColors),
-    handleType: getEnumValue(source, ['handleType', 'handle_type'], handleTypes),
-    handleColor: getEnumValue(source, ['handleColor', 'handle_color'], handleColors),
-    mullionOrientation: getEnumValue(source, ['mullionOrientation', 'mullion_orientation'], mullionOrientations),
-    additionalOptions: normalizeAdditionalOptions(source),
+    ...persistedPosition,
+    id: Math.max(1, Math.trunc(resolvedPositionId)),
+    width: getNumber(source, ['widthMm', 'width_mm', 'width']) ?? dimensions.width ?? persistedPosition?.width,
+    height: getNumber(source, ['heightMm', 'height_mm', 'height']) ?? dimensions.height ?? persistedPosition?.height,
+    price: getNumber(source, ['price', 'totalPrice', 'total_price', 'amount']) ?? persistedPosition?.price,
+    serverPrice: getNumber(source, ['serverPrice', 'server_price']) ?? persistedPosition?.serverPrice,
+    customerPrice: getNumber(source, ['customerPrice', 'customer_price']) ?? persistedPosition?.customerPrice,
+    dealerDiscountPercent:
+      getNumber(source, ['dealerDiscountPercent', 'dealer_discount_percent']) ?? persistedPosition?.dealerDiscountPercent,
+    dealerProfitAmount: getNumber(source, ['dealerProfitAmount', 'dealer_profit_amount']) ?? persistedPosition?.dealerProfitAmount,
+    dealerProfitCode: getString(source, ['dealerProfitCode', 'dealer_profit_code']) ?? persistedPosition?.dealerProfitCode,
+    openingType: getEnumValue(source, ['openingType', 'opening_type'], openingTypes) ?? persistedPosition?.openingType,
+    profileId: getString(source, ['profileId', 'profile_id']) ?? persistedPosition?.profileId,
+    packageType: parsePackageType(source) ?? persistedPosition?.packageType,
+    sealColor: getEnumValue(source, ['sealColor', 'seal_color'], sealColors) ?? persistedPosition?.sealColor,
+    drainage: getEnumValue(source, ['drainage', 'drainageType', 'drainage_type'], drainageTypes) ?? persistedPosition?.drainage,
+    windowColorSide:
+      getEnumValue(source, ['windowColorSide', 'window_color_side'], windowColorSides) ?? persistedPosition?.windowColorSide,
+    windowColor: getEnumValue(source, ['windowColor', 'window_color'], windowColors) ?? persistedPosition?.windowColor,
+    handleType: getEnumValue(source, ['handleType', 'handle_type'], handleTypes) ?? persistedPosition?.handleType,
+    handleColor: getEnumValue(source, ['handleColor', 'handle_color'], handleColors) ?? persistedPosition?.handleColor,
+    mullionOrientation:
+      getEnumValue(source, ['mullionOrientation', 'mullion_orientation'], mullionOrientations) ??
+      persistedPosition?.mullionOrientation,
+    additionalOptions:
+      (additionalOptions?.length ?? 0) > 0 ? additionalOptions : persistedPosition?.additionalOptions,
+    sashes: (sashes?.length ?? 0) > 0 ? sashes : persistedPosition?.sashes,
   };
+  const productionQuerySource = findFirstByKeys(source, ['productionQuery', 'production_query', 'query']);
+  const productionQuery =
+    normalizeCalculatorProductionQuery(productionQuerySource) ??
+    normalizeCalculatorProductionQuery(parseJsonString(productionQuerySource));
+
+  if (productionQuery) {
+    rawPosition.productionQuery = productionQuery;
+
+    if (typeof rawPosition.dealerDiscountPercent === 'undefined') {
+      const productionDiscount = normalizeNumber(productionQuery.discount);
+
+      if (productionDiscount !== null) {
+        rawPosition.dealerDiscountPercent = Math.max(0, productionDiscount);
+      }
+    }
+  }
 
   const mullionOffsetsValue = findFirstByKeys(source, ['mullionOffsets', 'mullion_offsets']);
 
@@ -573,6 +787,76 @@ const resolveSummaryStatusMeta = (status: OrderStatus): Pick<OrderSummary, 'subt
   };
 };
 
+const formatOrderItemPrice = (value: number, currency: string | null): string => {
+  try {
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency: currency || 'RUB',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const isServiceBasketItem = (source: unknown): boolean => {
+  const serviceType = getString(source, ['serviceType', 'service_type', 'type']);
+  return serviceType === 'installation' || serviceType === 'delivery' || serviceType === 'service';
+};
+
+const getOrderItemDimensionsLabel = (source: unknown, props: UnknownRecord | null): string | null => {
+  const explicitLabel =
+    getString(props, ['dimensions', 'dimensionsLabel', 'dimensions_label']) ??
+    getString(source, ['dimensions', 'dimensionsLabel', 'dimensions_label']);
+
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+
+  const width = getNumber(source, ['widthMm', 'width_mm', 'width']);
+  const height = getNumber(source, ['heightMm', 'height_mm', 'height']);
+
+  if (width !== null && width > 0 && height !== null && height > 0) {
+    return `${width} x ${height} мм`;
+  }
+
+  return null;
+};
+
+const buildOrderItemLabel = (source: unknown, index: number): string | null => {
+  if (!isRecord(source) || isServiceBasketItem(source)) {
+    return null;
+  }
+
+  const props = getItemProps(source);
+  const positionId = getString(props, ['positionId']) ?? getString(source, ['positionId', 'position_id']);
+  const itemName = getString(source, ['name', 'title']);
+  const schemeLabel = getString(props, ['openingTypeLabel']) ?? getString(source, ['openingTypeLabel', 'opening_type_label']);
+  const baseLabel = itemName ?? schemeLabel ?? `Позиция ${positionId ?? index + 1}`;
+  const dimensionsLabel = getOrderItemDimensionsLabel(source, props);
+  const quantity = getNumber(source, ['quantity']);
+  const price = getNumber(source, ['price', 'amount', 'totalPrice', 'total_price']);
+  const currency = getString(source, ['currency']);
+
+  return [
+    baseLabel,
+    dimensionsLabel,
+    quantity !== null && quantity > 1 ? `${quantity} шт.` : null,
+    price !== null && price > 0 ? formatOrderItemPrice(price, currency) : null,
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join(' · ');
+};
+
+const buildOrderItemLabels = (source: unknown): string[] => {
+  const productEntries = getArray(source, ['positions', 'products', 'productItems', 'product_items', 'basket', 'items']);
+
+  return productEntries
+    .map((item, index) => buildOrderItemLabel(item, index))
+    .filter((item): item is string => item !== null && item.trim().length > 0);
+};
+
 const buildOrderSummary = (source: unknown): RemoteOrderListItem | null => {
   if (!isRecord(source)) {
     return null;
@@ -605,7 +889,7 @@ const buildOrderSummary = (source: unknown): RemoteOrderListItem | null => {
     measurementDate: normalizeDateValue(findFirstByKeys(orderProps, ['MEASUREMENT_DATE', 'measurementDate', 'measurement_date'])),
     productionDate: normalizeDateValue(findFirstByKeys(orderProps, ['PRODUCTION_DATE', 'productionDate', 'production_date'])),
     installationDate: normalizeDateValue(findFirstByKeys(orderProps, ['INSTALLATION_DATE', 'installationDate', 'installation_date'])),
-    items: [],
+    items: buildOrderItemLabels(source),
     raw: source,
   };
 };
@@ -627,7 +911,7 @@ const buildServices = (source: unknown): OrderService[] => {
     .filter((item): item is OrderService => item !== null);
 };
 
-export const registerOrGetUser = async (form: OrderCustomerForm): Promise<string> => {
+export const registerOrGetUser = async (form: OrderCustomerForm, isUpdate = false): Promise<string> => {
   const login = buildUserLogin(form);
   const email = buildUserEmail(form, login);
   const response = await postLocalAjaxJson({
@@ -636,6 +920,8 @@ export const registerOrGetUser = async (form: OrderCustomerForm): Promise<string
     payload: {
       source: 'order-details',
       action: 'user_register_or_get',
+      isUpdate,
+      is_update: isUpdate,
       login,
       email,
       fio: form.fullName.trim(),
@@ -653,7 +939,6 @@ export const registerOrGetUser = async (form: OrderCustomerForm): Promise<string
     },
   });
 
-  console.log('[user_register_or_get] raw response', response);
   return extractRequiredId(response, ['userId', 'user_id', 'clientId', 'client_id', 'id'], 'user');
 };
 
@@ -663,7 +948,12 @@ export const saveRemoteOrder = async ({ orderId, payload }: SaveRemoteOrderParam
   const path = isExistingOrder
     ? `${LOCAL_AJAX_PATHS.refreshOrder}&order_id=${encodeURIComponent(String(orderId))}`
     : LOCAL_AJAX_PATHS.addOrder;
-  const response = await postLocalAjaxJson({ label, path, payload });
+  const response = await postLocalAjaxJson({
+    label,
+    path,
+    payload,
+    csrfToken: authStorage.getSession()?.token,
+  });
 
   return {
     orderId: getString(response, ['orderId', 'order_id', 'id']) ?? orderId ?? extractRequiredId(response, ['orderId', 'order_id', 'id'], 'order'),
@@ -680,7 +970,7 @@ export const getRemoteOrder = async (orderId: string): Promise<RemoteOrderSnapsh
   });
 
   const resolvedOrderId = getString(response, ['orderId', 'order_id', 'id']) ?? orderId;
-  const code = getString(response, ['code', 'orderCode', 'order_code', 'ORDER_CODE']) ?? resolvedOrderId;
+  const code = getString(response, ['code', 'orderCode', 'order_code', 'ORDER_CODE']) ?? '';
 
   return {
     orderId: resolvedOrderId,
@@ -703,14 +993,10 @@ export const getRemoteOrders = async (): Promise<RemoteOrderListItem[]> => {
     payload: null,
   });
 
-  console.log('[orders] raw response', response);
-
   const items = getArray(response, ['items']);
   const normalizedItems = items
     .map((item) => buildOrderSummary(item))
     .filter((item): item is RemoteOrderListItem => item !== null);
-
-  console.log('[orders] normalized items', normalizedItems);
 
   return normalizedItems;
 };
@@ -737,4 +1023,169 @@ export const deleteBasketItem = async ({
       serviceType: serviceType ?? null,
     },
   });
+};
+
+export const updateRemoteOrderCode = async ({
+  orderId,
+  orderCode,
+}: {
+  orderId: string;
+  orderCode: string;
+}): Promise<void> => {
+  await postLocalAjaxJson({
+    label: 'order_code_update',
+    path: LOCAL_AJAX_PATHS.updateOrderCode,
+    payload: {
+      source: 'order-details',
+      action: 'order_code_update',
+      order_id: orderId,
+      orderId,
+      order_code: orderCode,
+      orderCode,
+    },
+  });
+};
+
+export const updateRemoteOrderPayment = async ({
+  orderId,
+  payment,
+}: {
+  orderId: string;
+  payment: OrderPaymentPayload;
+}): Promise<void> => {
+  await postLocalAjaxJson({
+    label: 'order_payment_update',
+    path: LOCAL_AJAX_PATHS.updateOrderPayment,
+    payload: {
+      source: 'payment',
+      action: 'order_payment_update',
+      order_id: orderId,
+      orderId,
+      payment,
+      values: {
+        payment,
+      },
+    },
+  });
+};
+
+export const markRemoteOrderPaid = async ({
+  orderId,
+  payment,
+}: {
+  orderId: string;
+  payment: OrderPaymentPayload;
+}): Promise<void> => {
+  await postLocalAjaxJson({
+    label: 'order_paid_full',
+    path: LOCAL_AJAX_PATHS.markOrderPaid,
+    payload: {
+      source: 'payment',
+      action: 'order_paid_full',
+      order_id: orderId,
+      orderId,
+      payment,
+      values: {
+        payment,
+      },
+    },
+  });
+};
+
+export const requestRemoteInvoice = async (payload: unknown): Promise<RemoteInvoiceResponse> => {
+  const response = await postLocalAjaxJson({
+    label: 'get_data_invoice',
+    path: LOCAL_AJAX_PATHS.getDataInvoice,
+    payload,
+  });
+
+  return {
+    status: getString(response, ['status']),
+    invoiceNo: getNumber(response, ['invoice_no', 'invoiceNo']),
+    orderCode: getString(response, ['order_code', 'orderCode', 'code']),
+    amount: getNumber(response, ['amount']),
+    customerId: getString(response, ['customer_id', 'customerId']),
+    raw: response,
+  };
+};
+
+export const requestRemoteInvoicePdf = async ({
+  invoiceNo,
+  document = 'Коммерческое предложение +',
+}: {
+  invoiceNo: number;
+  document?: string;
+}): Promise<RemoteInvoicePdfResponse> => {
+  if (!Number.isFinite(invoiceNo) || invoiceNo <= 0) {
+    throw new Error('Не получен номер счета для печати КП.');
+  }
+
+  const payload = {
+    source: 'order-details',
+    action: 'get_data_print_invoice',
+    invoice_no: invoiceNo,
+    invoiceNo,
+    document,
+  };
+
+  const response = await fetch(LOCAL_AJAX_PATHS.getDataPrintInvoice, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const contentType = response.headers.get('content-type');
+  const responseBuffer = await response.arrayBuffer();
+  const responseText = decodeArrayBufferText(responseBuffer);
+  const parsedResponse = parseJsonString(responseText);
+  const responsePayload = parsedResponse ?? responseText;
+
+  if (!response.ok) {
+    throw new LocalAjaxError(response.status, responsePayload, '[local-ajax] get_data_print_invoice failed');
+  }
+
+  const isPdf = isPdfArrayBuffer(responseBuffer);
+  const isDeclaredPdf = Boolean(contentType?.toLowerCase().includes('pdf'));
+
+  if (isDeclaredPdf && !isPdf) {
+    throw new LocalAjaxError(
+      502,
+      {
+        success: false,
+        error: {
+          code: 'invalid_pdf_response',
+          message: responseBuffer.byteLength === 0 ? 'Server returned an empty PDF' : 'Server returned invalid PDF content',
+          responseBytes: responseBuffer.byteLength,
+        },
+      },
+      'Сервер не вернул корректный файл КП. Попробуйте ещё раз.',
+    );
+  }
+
+  const blobPdfUrl = isPdf
+    ? URL.createObjectURL(new Blob([responseBuffer], { type: contentType ?? 'application/pdf' }))
+    : null;
+  const pdfUrl = blobPdfUrl ?? normalizePdfUrl(responsePayload);
+
+  if (!pdfUrl) {
+    throw new LocalAjaxError(
+      502,
+      responsePayload,
+      'Сервер не вернул файл КП. Попробуйте ещё раз.',
+    );
+  }
+
+  const result: RemoteInvoicePdfResponse = {
+    invoiceNo,
+    pdfUrl,
+    fileName: `invoice-${invoiceNo}.pdf`,
+    contentType,
+    raw: isPdf ? '[PDF binary]' : responsePayload,
+  };
+
+  return result;
 };

@@ -41,6 +41,7 @@ interface StoredOrderDraft {
   amount: number | null;
   positions?: CalculatorPosition[];
   services?: OrderService[];
+  windowDiscount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +55,8 @@ const orderDateFormatter = new Intl.DateTimeFormat('ru-RU', {
 const isValidString = (value: unknown): value is string => typeof value === 'string';
 const isValidDraftAmount = (value: unknown): value is number | null | undefined =>
   typeof value === 'undefined' || value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0);
+const isValidDraftWindowDiscount = (value: unknown): value is number | undefined =>
+  typeof value === 'undefined' || (typeof value === 'number' && Number.isFinite(value) && value >= 0);
 
 const isValidDraftPositions = (value: unknown): value is CalculatorPosition[] | undefined =>
   typeof value === 'undefined' || (Array.isArray(value) && value.every(isCalculatorPosition));
@@ -274,6 +277,7 @@ const isStoredOrderDraft = (value: unknown): value is StoredOrderDraft => {
     isValidDraftAmount(draft.amount) &&
     isValidDraftPositions(draft.positions) &&
     isValidDraftServices(draft.services) &&
+    isValidDraftWindowDiscount(draft.windowDiscount) &&
     isValidString(draft.createdAt) &&
     isValidString(draft.updatedAt)
   );
@@ -282,6 +286,14 @@ const isStoredOrderDraft = (value: unknown): value is StoredOrderDraft => {
 const normalizeDraftAmount = (value: number | null | undefined): number | null => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return null;
+  }
+
+  return Math.max(0, Math.round(value));
+};
+
+const normalizeDraftWindowDiscount = (value: number | undefined): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
   }
 
   return Math.max(0, Math.round(value));
@@ -305,6 +317,7 @@ const parseOrderDrafts = (rawValue: string | null): StoredOrderDraft[] => {
       amount: normalizeDraftAmount(draft.amount),
       positions: normalizeDraftPositions(draft.positions),
       services: cloneServices(draft.services),
+      windowDiscount: normalizeDraftWindowDiscount(draft.windowDiscount),
     }));
   } catch {
     return [];
@@ -540,12 +553,18 @@ const getOrderServices = (orderId: string): OrderService[] | null => {
   return cloneServices(draft.services ?? []);
 };
 
+const getOrderWindowDiscount = (orderId: string): number => {
+  const draft = readOrderDrafts().find((item) => item.id === orderId);
+  return normalizeDraftWindowDiscount(draft?.windowDiscount);
+};
+
 const saveOrder = (
   orderId: string,
   form: OrderCustomerForm,
   amount?: number | null,
   positions?: CalculatorPosition[],
   services?: OrderService[],
+  windowDiscount?: number,
 ): void => {
   const drafts = readOrderDrafts();
   const now = new Date().toISOString();
@@ -553,6 +572,7 @@ const saveOrder = (
   const normalizedAmount = normalizeDraftAmount(amount);
   const normalizedPositions = clonePositions(positions ?? []);
   const normalizedServices = cloneServices(services ?? []);
+  const normalizedWindowDiscount = normalizeDraftWindowDiscount(windowDiscount);
   const draftIndex = drafts.findIndex((item) => item.id === orderId);
 
   if (draftIndex === -1) {
@@ -562,6 +582,7 @@ const saveOrder = (
       amount: normalizedAmount,
       positions: normalizedPositions,
       services: normalizedServices,
+      windowDiscount: normalizedWindowDiscount,
       createdAt: now,
       updatedAt: now,
     });
@@ -572,6 +593,8 @@ const saveOrder = (
       amount: typeof amount === 'undefined' ? drafts[draftIndex].amount : normalizedAmount,
       positions: typeof positions === 'undefined' ? drafts[draftIndex].positions ?? [] : normalizedPositions,
       services: typeof services === 'undefined' ? drafts[draftIndex].services ?? [] : normalizedServices,
+      windowDiscount:
+        typeof windowDiscount === 'undefined' ? normalizeDraftWindowDiscount(drafts[draftIndex].windowDiscount) : normalizedWindowDiscount,
       updatedAt: now,
     };
   }
@@ -584,6 +607,7 @@ const createOrder = (
   amount?: number | null,
   positions?: CalculatorPosition[],
   services?: OrderService[],
+  windowDiscount?: number,
 ): string => {
   const drafts = readOrderDrafts();
   const orderId = getNextOrderId(drafts);
@@ -595,6 +619,7 @@ const createOrder = (
     amount: normalizeDraftAmount(amount),
     positions: clonePositions(positions ?? []),
     services: cloneServices(services ?? []),
+    windowDiscount: normalizeDraftWindowDiscount(windowDiscount),
     createdAt: now,
     updatedAt: now,
   });
@@ -610,6 +635,7 @@ export const ordersStorage = {
   getOrderForm,
   getOrderPositions,
   getOrderServices,
+  getOrderWindowDiscount,
   getOrders,
   saveOrder,
 };

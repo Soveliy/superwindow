@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { Grid2X2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { loginRequest } from '@/features/auth/api/login';
+import { LoginError, loginRequest } from '@/features/auth/api/login';
 import { authStorage } from '@/features/auth/model/auth-storage';
 import { getDevAuthHint, tryDevLogin } from '@/features/auth/model/dev-auth';
 import type { LoginFormValues } from '@/features/auth/model/login.schema';
 import { LoginForm } from '@/features/auth/ui/LoginForm';
-import { HttpError } from '@/shared/api/http-client';
 
 const getErrorMessage = (error: unknown): string => {
-  if (error instanceof HttpError) {
-    return `Ошибка авторизации (${error.status}). Проверьте доступ к API.`;
+  if (error instanceof LoginError) {
+    return error.message;
   }
 
   return 'Не удалось выполнить вход. Повторите попытку.';
@@ -31,19 +30,18 @@ export const LoginPage = () => {
       const payload = {
         emailOrDealerId: values.emailOrDealerId,
         password: values.password,
+        rememberMe: values.rememberMe,
       };
 
-      const response =
-        tryDevLogin(payload) ??
-        (await loginRequest({
-          emailOrDealerId: payload.emailOrDealerId,
-          password: payload.password,
-        }));
+      const response = tryDevLogin(payload) ?? (await loginRequest(payload));
 
       authStorage.saveSession(
         {
           token: response.token || 'temporary-session-token',
           dealerId: response.dealerId ?? values.emailOrDealerId,
+          dealerName: response.dealerName,
+          dealerEmail: response.dealerEmail,
+          dealerLogin: response.dealerLogin,
           loggedAt: new Date().toISOString(),
         },
         values.rememberMe,
@@ -67,7 +65,7 @@ export const LoginPage = () => {
         <section className="px-6 pb-7">
           <div className="mb-6 flex flex-col items-center text-center">
             <div className="mb-5 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
-              <Grid2X2 className="h-9 w-9"/>
+              <Grid2X2 className="h-9 w-9" />
             </div>
             <h2 className="text-4xl font-extrabold tracking-tight text-ink-800">С возвращением</h2>
             <p className="mt-2 text-sm text-slate-500">Войдите, чтобы управлять заказами и оплатами</p>

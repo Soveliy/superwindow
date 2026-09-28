@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const loginSchema = z.object({
   emailOrDealerId: z
     .string()
-    .min(3, 'Введите email или ID дилера')
+    .min(3, 'Введите email, телефон или ID дилера')
     .max(100, 'Поле слишком длинное'),
   password: z
     .string()

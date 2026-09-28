@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import tsconfigPaths from 'vite-tsconfig-paths';
@@ -11,6 +11,8 @@ const isUserOrOrgPagesRepo =
   repositoryName.toLowerCase() === `${repositoryOwner.toLowerCase()}.github.io`;
 
 export default defineConfig(({ mode }) => {
+  const developmentEnv = loadEnv(mode, process.cwd(), 'VITE_');
+  const apiTarget = developmentEnv.VITE_API_BASE_URL?.trim();
   const base =
     isGitHubActions && repositoryName !== undefined
       ? isUserOrOrgPagesRepo
@@ -24,18 +26,31 @@ export default defineConfig(({ mode }) => {
 
   return {
     base,
+    server: {
+      proxy: apiTarget
+        ? {
+            '/local/rest/api/v1': {
+              target: apiTarget,
+              changeOrigin: true,
+              cookieDomainRewrite: '',
+              cookiePathRewrite: '/',
+            },
+            '/upload': { target: apiTarget, changeOrigin: true },
+          }
+        : undefined,
+    },
     plugins: [
       react(),
       tsconfigPaths(),
       VitePWA({
         registerType: 'autoUpdate',
         selfDestroying: useHashRouting,
-        includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
+        includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'push-notifications.js'],
         manifest: {
           id: startUrl,
-          name: 'SuperWindow - РљР°Р±РёРЅРµС‚ РґРёР»РµСЂР°',
-          short_name: 'РљР°Р±РёРЅРµС‚ РґРёР»РµСЂР°',
-          description: 'PWA-РїСЂРёР»РѕР¶РµРЅРёРµ РґР»СЏ РѕС„РѕСЂРјР»РµРЅРёСЏ Р·Р°РєР°Р·РѕРІ РґРёР»РµСЂР°',
+          name: 'SuperWindow - Кабинет дилера',
+          short_name: 'Кабинет дилера',
+          description: 'PWA-приложение для оформления заказов дилера',
           lang: 'ru-RU',
           theme_color: '#2f8de8',
           background_color: '#e9edf2',
@@ -64,6 +79,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          importScripts: ['push-notifications.js'],
         },
         devOptions: {
           enabled: true,

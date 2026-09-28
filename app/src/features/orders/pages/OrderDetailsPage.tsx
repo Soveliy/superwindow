@@ -3,8 +3,10 @@ import {
   ArrowLeft,
   ChevronDown,
   Copy,
+  Eye,
   MapPin,
   Pencil,
+  Percent,
   Plus,
   ShoppingCart,
   Trash2,
@@ -19,8 +21,11 @@ import {
   deleteBasketItem,
   getRemoteOrder,
   registerOrGetUser,
+  requestRemoteInvoice,
+  requestRemoteInvoicePdf,
   saveRemoteOrder,
   type RemoteOrderSnapshot,
+  updateRemoteOrderCode,
 } from '@/features/orders/api/order-rest';
 import {
   clearCalculatorPositions,
@@ -28,11 +33,23 @@ import {
   normalizeCalculatorPosition,
   readCalculatorPositions,
   writeCalculatorPositions,
+  type CalculatorAdditionalOption,
+  type CalculatorProductionAccessory,
+  type CalculatorProductionQuery,
   type CalculatorPosition,
+  type DrainageType,
+  type HandleColor,
+  type OpeningType,
+  type SashId,
+  type SealColor,
+  type SillType,
+  type WindowColor,
 } from '@/features/calculator/model/positions.storage';
 import { getOrderStatusUi } from '@/features/orders/model/order-status';
-import { type DeliveryMode, orderDetailsMock, type OrderService } from '@/features/orders/model/orders.mock';
+import { type DeliveryMode, type OrderService } from '@/features/orders/model/orders.mock';
 import { ordersStorage, type OrderCustomerForm } from '@/features/orders/model/orders.storage';
+import { convertMeasurementLead, getLead } from '@/features/leads';
+import { buildOrderPaymentPayload, DEFAULT_ORDER_PAYMENT_SELECTION } from '@/features/payment/model/payment-options';
 import { LOCAL_AJAX_PATHS, postLocalAjaxJson } from '@/shared/api/local-ajax';
 import { readAvailableProductionDates } from '@/features/settings/model/production-dates.storage';
 import { formatCurrency } from '@/shared/lib/format';
@@ -45,17 +62,433 @@ interface OrderDetailsLocationState {
   calculatorPositions?: CalculatorPosition[];
   draftForm?: OrderCustomerForm;
   draftServices?: OrderService[];
+  draftWindowDiscount?: number;
+  sourceLeadId?: string;
+  sourceLeadVersion?: number;
+  leadConversionWarning?: string;
 }
+
+interface InvoiceProductQuery {
+  type_id: number;
+  width: number;
+  height: number;
+  system_id?: string;
+  color?: string;
+  mullionOffset?: Array<Record<string, number>>;
+  parameters?: CalculatorProductionQuery['parameters'];
+  contours?: CalculatorProductionQuery['contours'];
+  accessories?: CalculatorProductionAccessory[];
+  [key: string]: unknown;
+}
+
+type ProductionProfileId =
+  | 'rula-58'
+  | 'isotech-58'
+  | 'grunder-60'
+  | 'wintech-70'
+  | 'exprof-arctica'
+  | 'profecta-plus';
 
 const INSTALLATION_RATE_PER_SQUARE = 3500;
 const DATE_RANGE_DAYS = 5;
+const MAX_DEALER_DISCOUNT_PERCENT = 46;
+const SUPPORTED_DRIP_DEPTH = 180;
+const MOSQUITO_SCREEN_ARTICLE = 'МС';
+const MOSQUITO_SCREEN_COLOR = 'Без цвета';
 const serviceTypeLabels: Record<OrderService['type'], string> = {
   installation: 'Монтаж (ГОСТ)',
   delivery: 'Доставка',
 };
+const additionalOptionTypeLabels = {
+  sill: 'Подоконник',
+  drip: 'Отлив',
+} as const;
+const sillTypeLabels: Record<string, string> = {
+  fineber: 'Fineber',
+  komfort: 'KOMFORT',
+};
+const sillColorLabels: Record<string, string> = {
+  white: 'Белый',
+  brown: 'Коричневый',
+  anthracite: 'Антрацит',
+};
+const dripColorLabels: Record<string, string> = {
+  white: 'Белый',
+  brown: 'Коричневый',
+  gray: 'Серый ',
+};
+const productionTypeIds: Record<OpeningType, number> = {
+  single: 344,
+  single_turn: 345,
+  double: 351,
+  double_left_active: 347,
+  double_right_active: 346,
+  double_dual_active: 352,
+  triple: 348,
+  triple_dual_active: 353,
+  triple_full_active: 348,
+  balcony: 349,
+  balcony_left_door: 350,
+  balcony_right_door: 350,
+};
+const productionContourCounts: Record<OpeningType, CalculatorProductionQuery['contours'][number]['id']> = {
+  single: 1,
+  single_turn: 2,
+  double: 1,
+  double_left_active: 2,
+  double_right_active: 2,
+  double_dual_active: 3,
+  triple: 2,
+  triple_dual_active: 3,
+  triple_full_active: 3,
+  balcony: 2,
+  balcony_left_door: 2,
+  balcony_right_door: 2,
+};
+const productionProfileIds = [
+  'rula-58',
+  'isotech-58',
+  'grunder-60',
+  'wintech-70',
+  'exprof-arctica',
+  'profecta-plus',
+] as const;
+const defaultProductionProfileId: ProductionProfileId = 'grunder-60';
+const productionSystemIds: Record<ProductionProfileId, string> = {
+  'rula-58': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/ RULA 58 мм',
+  'isotech-58': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/ISOTECH 58',
+  'grunder-60': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60',
+  'wintech-70': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 70 мм-80 мм/ WINTECH 70 КЛАСС А',
+  'exprof-arctica': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 70 мм-80 мм/EXPROF ARCTICA',
+  'profecta-plus': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 70 мм-80 мм/PROFECTA PLUS',
+};
+const productionWindowColorLabels: Record<WindowColor, string> = {
+  white: '  Белый',
+  anthracite: '  Белый/Антрацит уль',
+  golden_oak: '  Белый/Золотой дуб',
+  dark_oak: '  Белый/Темн. дуб',
+  mahogany: '  Белый/Африк. вишня',
+  silver: '  Белый/Квар. серый',
+};
+const profectaPlusProductionWindowColorLabels: Partial<Record<WindowColor, string>> = {
+  mahogany: '  Белый/Африк. вишня',
+};
+const productionHandleColorLabels: Record<HandleColor, string> = {
+  white: ' БЕЛЫЙ',
+  anthracite: 'АНТРАЦИТ',
+  brown: 'КОРИЧНЕВЫЙ',
+  light_brown: 'СВЕТЛОКОРИЧНЕВЫЙ',
+  black: 'ЧЁРНЫЙ',
+};
+const laminateProductionProfileIds = new Set<ProductionProfileId>(['grunder-60', 'wintech-70', 'profecta-plus']);
+const productionSealColorLabels: Record<SealColor, string> = {
+  black: 'Черный',
+  gray: 'Серый ',
+  white: 'Белый',
+};
+const productionDrainageLabels: Record<DrainageType, string> = {
+  bottom: 'СНИЗУ',
+  none: 'НЕТ',
+  street: 'СО СТОРОНЫ УЛИЦЫ',
+};
+const productionDripColorLabels: Record<string, string> = {
+  white: 'Белый',
+  brown: 'КОРИЧНЕВЫЙ',
+  gray: 'Серый ',
+  Белый: 'Белый',
+  Коричневый: 'КОРИЧНЕВЫЙ',
+  КОРИЧНЕВЫЙ: 'КОРИЧНЕВЫЙ',
+  Серый: 'Серый ',
+  'Серый ': 'Серый ',
+};
+const productionDripArticleLabels: Record<number, string> = {
+  180: 'ОТЛ. 180 (ш-0,23)',
+};
+const productionSillTypeArticleLabels: Record<SillType, string> = {
+  fineber: 'FineBer',
+  komfort: 'KOMFORT',
+};
 const deliveryModeLabels: Record<DeliveryMode, string> = {
   manual: 'Стоимость вручную',
   pickup: 'Самовывоз',
+};
+const withBase = (path: string): string => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+const openingSchemeImages: Record<OpeningType, string> = {
+  single: withBase('/windows/9.svg'),
+  single_turn: withBase('/windows/7.svg'),
+  double: withBase('/windows/8.svg'),
+  double_left_active: withBase('/windows/5.svg'),
+  double_right_active: withBase('/windows/6.svg'),
+  double_dual_active: withBase('/windows/4.svg'),
+  triple: withBase('/windows/3.svg'),
+  triple_dual_active: withBase('/windows/2.svg'),
+  triple_full_active: withBase('/windows/7.svg'),
+  balcony: withBase('/windows/1.svg'),
+  balcony_left_door: withBase('/windows/1.svg'),
+  balcony_right_door: withBase('/windows/10.svg'),
+};
+const openingSchemeFallbackImage = withBase('/windows/8.svg');
+
+const getOpeningSchemeImage = (openingType: OpeningType | undefined): string =>
+  openingType ? openingSchemeImages[openingType] : openingSchemeFallbackImage;
+const isProductionProfileId = (value: string | undefined): value is ProductionProfileId =>
+  productionProfileIds.includes(value as ProductionProfileId);
+const normalizeProductionProfileId = (value: string | undefined): ProductionProfileId =>
+  isProductionProfileId(value) ? value : defaultProductionProfileId;
+const isLaminateColorAvailable = (profileId: ProductionProfileId, color: WindowColor): boolean =>
+  color === 'white' || laminateProductionProfileIds.has(profileId);
+const getProductionWindowColor = (profileId: ProductionProfileId, color: WindowColor | undefined): string => {
+  const normalizedColor = color && isLaminateColorAvailable(profileId, color) ? color : 'white';
+
+  if (profileId === 'profecta-plus') {
+    return profectaPlusProductionWindowColorLabels[normalizedColor] ?? productionWindowColorLabels[normalizedColor];
+  }
+
+  return productionWindowColorLabels[normalizedColor];
+};
+const formatProductionMeters = (valueMm: number): string => {
+  const valueMeters = Math.max(0, valueMm) / 1000;
+  const roundedValue = Number(valueMeters.toFixed(3));
+
+  return String(roundedValue).replace('.', ',');
+};
+const getProductionAccessoryArticle = (option: CalculatorAdditionalOption): string => {
+  const depth = option.type === 'drip' ? SUPPORTED_DRIP_DEPTH : option.width ?? 300;
+
+  if (option.type === 'sill') {
+    return `Под ${depth} ${productionSillTypeArticleLabels.fineber}`;
+  }
+
+  return productionDripArticleLabels[SUPPORTED_DRIP_DEPTH];
+};
+const isProductionDripArticle = (article: string): boolean => article.trim().toUpperCase().startsWith('ОТЛ.');
+const isProductionMosquitoArticle = (article: string): boolean =>
+  article.trim().toUpperCase() === MOSQUITO_SCREEN_ARTICLE;
+const normalizeInvoiceAccessory = (accessory: CalculatorProductionAccessory): CalculatorProductionAccessory => {
+  if (!isProductionDripArticle(accessory.article)) {
+    return accessory;
+  }
+
+  const normalizedColor = productionDripColorLabels[accessory.color] ?? productionDripColorLabels[accessory.color.trim()];
+
+  return {
+    ...accessory,
+    article: productionDripArticleLabels[SUPPORTED_DRIP_DEPTH],
+    color: normalizedColor ?? accessory.color,
+    width: formatProductionMeters(SUPPORTED_DRIP_DEPTH),
+  };
+};
+const normalizeInvoiceProductQuery = (productQuery: InvoiceProductQuery): InvoiceProductQuery => {
+  if (!productQuery.accessories || productQuery.accessories.length === 0) {
+    return productQuery;
+  }
+
+  return {
+    ...productQuery,
+    accessories: productQuery.accessories.map(normalizeInvoiceAccessory),
+  };
+};
+const productionActiveContourOverrides: Partial<
+  Record<OpeningType, Array<CalculatorProductionQuery['contours'][number]['id']>>
+> = {
+  triple_dual_active: [2],
+};
+const buildProductionHandleContour = (
+  id: CalculatorProductionQuery['contours'][number]['id'],
+  handleColor: HandleColor,
+): CalculatorProductionQuery['contours'][number] => ({
+  id,
+  parameters: [
+    {
+      'ТИП РУЧКИ': '  ОКОННАЯ',
+    },
+    {
+      'ВИД РУЧКИ': 'ACCADO',
+    },
+    {
+      'ЦВЕТ РУЧКИ ACCADO': productionHandleColorLabels[handleColor],
+    },
+  ],
+});
+const buildProductionContours = (
+  openingType: OpeningType,
+  handleColor: HandleColor,
+): CalculatorProductionQuery['contours'] => {
+  const activeContourIds = productionActiveContourOverrides[openingType];
+
+  if (activeContourIds) {
+    return activeContourIds.map((id) => buildProductionHandleContour(id, handleColor));
+  }
+
+  return Array.from({ length: productionContourCounts[openingType] }, (_, index) => {
+    const id = (index + 1) as CalculatorProductionQuery['contours'][number]['id'];
+
+    if (id === 1) {
+      return null;
+    }
+
+    return buildProductionHandleContour(id, handleColor);
+  }).filter((contour): contour is CalculatorProductionQuery['contours'][number] => contour !== null);
+};
+const applyProductionHandleParameters = (
+  contours: CalculatorProductionQuery['contours'],
+  handleColor: HandleColor,
+): CalculatorProductionQuery['contours'] =>
+  contours.map((contour) => ({
+    ...contour,
+    parameters: [
+      ...(contour.parameters ?? []).filter((parameter) =>
+        Object.keys(parameter).every((key) => key !== 'ВИД РУЧКИ' && !key.startsWith('ЦВЕТ РУЧКИ ')),
+      ),
+      {
+        'ВИД РУЧКИ': 'ACCADO',
+      },
+      {
+        'ЦВЕТ РУЧКИ ACCADO': productionHandleColorLabels[handleColor],
+      },
+    ],
+  }));
+const getSashSectionIds = (openingType: OpeningType): readonly SashId[] => {
+  if (openingType.startsWith('triple')) {
+    return ['left', 'center', 'right'];
+  }
+
+  if (openingType.startsWith('double') || openingType.startsWith('balcony')) {
+    return ['left', 'right'];
+  }
+
+  return ['single'];
+};
+const getSashSectionWidths = (
+  position: CalculatorPosition,
+  openingType: OpeningType,
+): Map<SashId, number> => {
+  const sectionIds = getSashSectionIds(openingType);
+  const windowWidth = position.width ?? 1300;
+  const equalSectionWidth = Math.max(1, Math.round(windowWidth / Math.max(1, sectionIds.length)));
+
+  if (sectionIds.length <= 1 || position.mullionOrientation === 'horizontal') {
+    return new Map(
+      sectionIds.map((sashId) => [sashId, sectionIds.length === 1 ? windowWidth : equalSectionWidth]),
+    );
+  }
+
+  const offsets = Object.values(position.mullionOffsets ?? {})
+    .filter((offset) => Number.isFinite(offset) && offset > 0 && offset < windowWidth)
+    .sort((a, b) => a - b)
+    .slice(0, sectionIds.length - 1);
+
+  if (offsets.length !== sectionIds.length - 1) {
+    return new Map(sectionIds.map((sashId) => [sashId, equalSectionWidth]));
+  }
+
+  const boundaries = [0, ...offsets, windowWidth];
+
+  return new Map(
+    sectionIds.map((sashId, index) => [
+      sashId,
+      Math.max(1, Math.round(boundaries[index + 1] - boundaries[index])),
+    ]),
+  );
+};
+const buildProductionMosquitoAccessories = (
+  position: CalculatorPosition,
+  openingType: OpeningType,
+  startId: number,
+): CalculatorProductionAccessory[] => {
+  const selectedSashes = position.sashes?.filter((sash) => sash.mosquitoScreenEnabled) ?? [];
+
+  if (selectedSashes.length === 0) {
+    return [];
+  }
+
+  const sectionWidths = getSashSectionWidths(position, openingType);
+  const windowHeight = position.height ?? 1400;
+  const windowWidth = position.width ?? 1300;
+
+  return selectedSashes.map((sash, index) => ({
+    id: startId + index,
+    article: MOSQUITO_SCREEN_ARTICLE,
+    color: MOSQUITO_SCREEN_COLOR,
+    quantity: '1',
+    length: formatProductionMeters(windowHeight),
+    width: formatProductionMeters(sectionWidths.get(sash.id) ?? windowWidth),
+  }));
+};
+const buildCanonicalInvoiceProductQuery = (
+  productQuery: InvoiceProductQuery,
+  position: CalculatorPosition,
+  openingType: OpeningType,
+): InvoiceProductQuery => {
+  const normalizedQuery = normalizeInvoiceProductQuery(productQuery);
+  const profileId = normalizeProductionProfileId(position.profileId);
+  const handleColor = position.handleColor ?? 'white';
+  const sourceContours = normalizedQuery.contours?.length
+    ? normalizedQuery.contours
+    : buildProductionContours(openingType, handleColor);
+  const optionAccessories = (normalizedQuery.accessories ?? []).filter(
+    (accessory) => !isProductionMosquitoArticle(accessory.article),
+  );
+  const nextAccessoryId = Math.max(0, ...optionAccessories.map((accessory) => accessory.id)) + 1;
+  const mosquitoAccessories = buildProductionMosquitoAccessories(position, openingType, nextAccessoryId);
+  const accessories = [...optionAccessories, ...mosquitoAccessories];
+
+  return {
+    ...normalizedQuery,
+    system_id: productionSystemIds[profileId],
+    color: position.windowColor
+      ? getProductionWindowColor(profileId, position.windowColor)
+      : normalizedQuery.color,
+    contours: applyProductionHandleParameters(sourceContours, handleColor),
+    accessories: accessories.length > 0 ? accessories : undefined,
+  };
+};
+const buildProductionAccessories = (
+  position: CalculatorPosition,
+  openingType: OpeningType,
+): CalculatorProductionQuery['accessories'] => {
+  const windowWidth = position.width ?? 1300;
+  const optionAccessories = (position.additionalOptions ?? []).map((option) => ({
+    id: option.id,
+    article: getProductionAccessoryArticle(option),
+    color:
+      option.type === 'sill'
+        ? sillColorLabels[option.sillColor ?? 'white']
+        : productionDripColorLabels[option.dripColor ?? 'white'],
+    quantity: '1',
+    length: formatProductionMeters(option.type === 'drip' ? windowWidth : option.length ?? 0),
+    width: formatProductionMeters(option.type === 'drip' ? SUPPORTED_DRIP_DEPTH : option.width ?? 0),
+  }));
+  const nextAccessoryId = Math.max(0, ...optionAccessories.map((accessory) => accessory.id)) + 1;
+  const mosquitoAccessories = buildProductionMosquitoAccessories(position, openingType, nextAccessoryId);
+  const accessories = [...optionAccessories, ...mosquitoAccessories];
+
+  return accessories.length > 0 ? accessories : undefined;
+};
+const buildProductionMullionOffset = (position: CalculatorPosition): Array<Record<string, number>> =>
+  Object.entries(position.mullionOffsets ?? {})
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([index, offset]) => ({ [index]: offset }));
+const buildFallbackProductionQuery = (position: CalculatorPosition, openingType: OpeningType): InvoiceProductQuery => {
+  const width = position.width ?? 1300;
+  const height = position.height ?? 1400;
+  const profileId = normalizeProductionProfileId(position.profileId);
+  const accessories = buildProductionAccessories(position, openingType);
+
+  return {
+    type_id: productionTypeIds[openingType],
+    width,
+    height,
+    system_id: productionSystemIds[profileId],
+    color: getProductionWindowColor(profileId, position.windowColor),
+    mullionOffset: buildProductionMullionOffset(position),
+    parameters: {
+      sealColor: productionSealColorLabels[position.sealColor ?? 'black'],
+      drainage: productionDrainageLabels[position.drainage ?? 'bottom'],
+    },
+    contours: buildProductionContours(openingType, position.handleColor ?? 'white'),
+    ...(accessories ? { accessories } : {}),
+  };
 };
 
 const existingOrderDefaultValues: OrderCustomerForm = {
@@ -109,6 +542,36 @@ const formatPhoneInput = (rawValue: string) => {
   }
 
   return masked;
+};
+
+const formatInvoicePhone = (rawValue: string): string => {
+  const digitsOnly = rawValue.replace(/\D/g, '');
+
+  if (!digitsOnly) {
+    return '';
+  }
+
+  const normalizedDigits = digitsOnly.startsWith('8')
+    ? `7${digitsOnly.slice(1)}`
+    : digitsOnly.startsWith('7')
+      ? digitsOnly
+      : `7${digitsOnly}`;
+
+  return `+${normalizedDigits.slice(0, 11)}`;
+};
+
+const downloadFileUrl = (url: string | null, fileName: string): void => {
+  if (!url) {
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 };
 
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -332,6 +795,105 @@ const parseMoneyInput = (value: string): number => {
   return Math.max(0, Number.parseInt(digits, 10));
 };
 
+const normalizeDiscountAmount = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.round(value));
+};
+
+const clampDealerDiscountPercent = (value: number): number =>
+  Math.max(0, Math.min(MAX_DEALER_DISCOUNT_PERCENT, Number.isFinite(value) ? value : 0));
+
+const formatInvitecraftDiscount = (value: number): string => {
+  const roundedValue = Math.round(clampDealerDiscountPercent(value) * 100) / 100;
+  return Number.isInteger(roundedValue) ? String(roundedValue) : roundedValue.toFixed(2);
+};
+
+const getPositionServerPrice = (position: CalculatorPosition): number => {
+  if (typeof position.serverPrice === 'number' && Number.isFinite(position.serverPrice) && position.serverPrice > 0) {
+    return position.serverPrice;
+  }
+
+  const price = typeof position.price === 'number' && Number.isFinite(position.price) ? position.price : 0;
+  const discount = clampDealerDiscountPercent(position.dealerDiscountPercent ?? 0);
+
+  if (price > 0 && discount > 0 && discount < 100) {
+    return Math.round(price / (1 - discount / 100));
+  }
+
+  return Math.max(0, Math.round(price));
+};
+
+const getPositionDealerProfit = (position: CalculatorPosition): number => {
+  if (
+    typeof position.dealerProfitAmount === 'number' &&
+    Number.isFinite(position.dealerProfitAmount) &&
+    position.dealerProfitAmount >= 0
+  ) {
+    return Math.round(position.dealerProfitAmount);
+  }
+
+  return Math.max(
+    0,
+    Math.round(
+      getPositionServerPrice(position) *
+        ((MAX_DEALER_DISCOUNT_PERCENT - clampDealerDiscountPercent(position.dealerDiscountPercent ?? 0)) / 100),
+    ),
+  );
+};
+
+const buildDealerProfitCode = (profitAmount: number): string => `PRFT-${Math.max(0, Math.round(profitAmount))}`;
+
+const getInitialWindowDiscount = (
+  orderId: string | undefined,
+  locationState: OrderDetailsLocationState | null,
+): number => {
+  if (typeof locationState?.draftWindowDiscount === 'number') {
+    return normalizeDiscountAmount(locationState.draftWindowDiscount);
+  }
+
+  return orderId ? ordersStorage.getOrderWindowDiscount(orderId) : 0;
+};
+
+const mergePositionSnapshots = (
+  remotePositions: CalculatorPosition[],
+  fallbackPositions: CalculatorPosition[],
+): CalculatorPosition[] => {
+  if (remotePositions.length === 0) {
+    return fallbackPositions.map(normalizeCalculatorPosition);
+  }
+
+  const fallbackById = new Map(fallbackPositions.map((position) => [position.id, position]));
+
+  return remotePositions.map((remotePosition) => {
+    const fallbackPosition = fallbackById.get(remotePosition.id);
+    const definedRemoteValues = Object.fromEntries(
+      Object.entries(remotePosition).filter(([, value]) => typeof value !== 'undefined'),
+    ) as CalculatorPosition;
+
+    return normalizeCalculatorPosition({
+      ...(fallbackPosition ?? { id: remotePosition.id }),
+      ...definedRemoteValues,
+      ...(fallbackPosition
+        ? {
+            price: fallbackPosition.price ?? definedRemoteValues.price,
+            serverPrice: fallbackPosition.serverPrice ?? definedRemoteValues.serverPrice,
+            customerPrice: fallbackPosition.customerPrice ?? definedRemoteValues.customerPrice,
+            dealerDiscountPercent:
+              fallbackPosition.dealerDiscountPercent ?? definedRemoteValues.dealerDiscountPercent,
+            dealerProfitAmount: fallbackPosition.dealerProfitAmount ?? definedRemoteValues.dealerProfitAmount,
+            dealerProfitCode: fallbackPosition.dealerProfitCode ?? definedRemoteValues.dealerProfitCode,
+            profileId: fallbackPosition.profileId ?? definedRemoteValues.profileId,
+            windowColor: fallbackPosition.windowColor ?? definedRemoteValues.windowColor,
+            productionQuery: fallbackPosition.productionQuery ?? definedRemoteValues.productionQuery,
+          }
+        : {}),
+    });
+  });
+};
+
 const upsertService = (services: OrderService[], nextService: OrderService): OrderService[] => [
   ...services.filter((service) => service.type !== nextService.type),
   nextService,
@@ -411,15 +973,33 @@ const buildOrderPositionLabels = (positions: CalculatorPosition[]) =>
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }),
+    serverPriceLabel: formatCurrency(getPositionServerPrice(position), {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+    dealerDiscountPercentLabel: `${clampDealerDiscountPercent(position.dealerDiscountPercent ?? 0)}%`,
+    dealerProfitLabel: formatCurrency(getPositionDealerProfit(position)),
+    dealerProfitCode: buildDealerProfitCode(getPositionDealerProfit(position)),
     openingTypeLabel: position.openingType ?? '',
     profileLabel: position.profileId ?? '',
     packageLabel: position.packageType ?? '',
+    mosquitoScreensLabel:
+      position.sashes
+        ?.filter((sash) => sash.mosquitoScreenEnabled)
+        .map((sash) => `Москитная сетка: ${sash.id}`) ?? [],
     additionalOptions:
       position.additionalOptions?.map((option) => ({
         id: option.id,
-        typeLabel: option.type === 'sill' ? 'Подоконник' : 'Отлив',
-        sizeLabel: `${option.length ?? 0} x ${option.width ?? 0} мм`,
-        sillColorLabel: option.sillColor ?? '',
+        typeLabel: additionalOptionTypeLabels[option.type],
+        sizeLabel:
+          option.type === 'sill'
+            ? `Длина: ${option.length ?? 0} мм · ширина: ${option.width ?? 0} мм`
+            : `Ширина: ${option.width ?? 180} мм`,
+        sillType: option.sillType ?? null,
+        sillTypeLabel: option.sillType ? sillTypeLabels[option.sillType] ?? option.sillType : null,
+        sillColorLabel: option.sillColor ? sillColorLabels[option.sillColor] ?? option.sillColor : null,
+        dripColor: option.dripColor ?? null,
+        dripColorLabel: option.dripColor ? dripColorLabels[option.dripColor] ?? option.dripColor : null,
       })) ?? [],
   }));
 
@@ -430,6 +1010,11 @@ const buildOrderPositionValues = (positions: CalculatorPosition[]) =>
     widthMm: position.width ?? 0,
     heightMm: position.height ?? 0,
     price: position.price ?? 0,
+    serverPrice: getPositionServerPrice(position),
+    customerPrice: position.customerPrice ?? position.price ?? 0,
+    dealerDiscountPercent: clampDealerDiscountPercent(position.dealerDiscountPercent ?? 0),
+    dealerProfitAmount: getPositionDealerProfit(position),
+    dealerProfitCode: buildDealerProfitCode(getPositionDealerProfit(position)),
     openingType: position.openingType ?? null,
     profileId: position.profileId ?? null,
     packageType: position.packageType ?? null,
@@ -441,13 +1026,19 @@ const buildOrderPositionValues = (positions: CalculatorPosition[]) =>
     handleColor: position.handleColor ?? null,
     mullionOrientation: position.mullionOrientation ?? null,
     mullionOffsets: position.mullionOffsets ?? {},
+    sashes: position.sashes ?? [],
+    mosquitoScreens: position.sashes?.filter((sash) => sash.mosquitoScreenEnabled).map((sash) => sash.id) ?? [],
+    productionQuery: position.productionQuery ?? null,
+    query: position.productionQuery ?? null,
     additionalOptions:
       position.additionalOptions?.map((option) => ({
         id: option.id,
         type: option.type,
         length: option.length ?? 0,
         width: option.width ?? 0,
+        sillType: option.sillType ?? null,
         sillColor: option.sillColor ?? null,
+        dripColor: option.dripColor ?? null,
       })) ?? [],
     rawPosition: position,
   }));
@@ -458,16 +1049,31 @@ export const OrderDetailsPage = () => {
   const { orderId } = useParams();
   const locationState = location.state as OrderDetailsLocationState | null;
   const shouldResetCalculatorPositions = locationState?.resetCalculatorPositions === true;
+  const sourceQuery = new URLSearchParams(location.search);
+  const queriedSourceLeadId = sourceQuery.get('sourceLeadId')?.trim() || null;
+  const queriedSourceLeadVersion = Number(sourceQuery.get('sourceLeadVersion'));
+  const sourceLeadId =
+    typeof locationState?.sourceLeadId === 'string' && locationState.sourceLeadId.trim()
+      ? locationState.sourceLeadId.trim()
+      : queriedSourceLeadId;
+  const sourceLeadVersion =
+    typeof locationState?.sourceLeadVersion === 'number' && Number.isFinite(locationState.sourceLeadVersion)
+      ? locationState.sourceLeadVersion
+      : Number.isFinite(queriedSourceLeadVersion) && queriedSourceLeadVersion > 0
+        ? queriedSourceLeadVersion
+        : undefined;
 
   const [form, setForm] = useState<OrderCustomerForm>(() => getInitialFormValues(orderId, locationState));
   const [positions, setPositions] = useState<CalculatorPosition[]>(() =>
     getInitialPositions(orderId, shouldResetCalculatorPositions, locationState),
   );
   const [services, setServices] = useState<OrderService[]>(() => getInitialServices(orderId, locationState));
+  const [windowDiscount, setWindowDiscount] = useState(() => getInitialWindowDiscount(orderId, locationState));
   const [remoteOrder, setRemoteOrder] = useState<RemoteOrderSnapshot | null>(null);
   const [remoteOrderError, setRemoteOrderError] = useState<string | null>(null);
   const [isRemoteOrderLoading, setRemoteOrderLoading] = useState(false);
   const [isSubmittingOrder, setSubmittingOrder] = useState(false);
+  const [isPreparingPayment, setPreparingPayment] = useState(false);
   const [reloadRemoteOrderKey, setReloadRemoteOrderKey] = useState(0);
   const [isCustomerInfoCollapsed, setCustomerInfoCollapsed] = useState(false);
   const [isServiceDialogOpen, setServiceDialogOpen] = useState(false);
@@ -475,18 +1081,30 @@ export const OrderDetailsPage = () => {
   const [installationDiscountInput, setInstallationDiscountInput] = useState('0');
   const [deliveryModeInput, setDeliveryModeInput] = useState<DeliveryMode>('manual');
   const [deliveryPriceInput, setDeliveryPriceInput] = useState('2000');
+  const [isWindowDiscountDialogOpen, setWindowDiscountDialogOpen] = useState(false);
+  const [windowDiscountInput, setWindowDiscountInput] = useState('0');
   const [availableProductionDates, setAvailableProductionDates] = useState<string[]>(() => readAvailableProductionDates());
   const previousOrderIdRef = useRef<string | undefined>(orderId);
   const storedOrder = orderId ? ordersStorage.getOrderById(orderId) : undefined;
   const currentOrderId = remoteOrder?.orderId ?? orderId ?? null;
   const currentOrderStatusValue = remoteOrder?.status ?? storedOrder?.status;
   const currentOrderAmount = remoteOrder?.amount ?? storedOrder?.amount ?? null;
-  const currentOrderCode = remoteOrder?.code ?? storedOrder?.code ?? orderDetailsMock.code;
+  const currentOrderCode = remoteOrder?.code ?? storedOrder?.code ?? '';
   const orderStatus = getOrderStatusUi(currentOrderStatusValue);
-  const isReadonlyOrder = currentOrderStatusValue === 'ready';
-  const isCustomerFieldsReadonly = isReadonlyOrder;
+  const isReadonlyOrder = currentOrderStatusValue === 'ready' || currentOrderStatusValue === 'paid';
+  const isQuoteCreated = form.contractNumber.trim().length > 0;
+  const isOrderFinalized = isReadonlyOrder || isQuoteCreated;
+  const isOrderEditingLocked = isOrderFinalized || isPreparingPayment;
+  const isCustomerFieldsReadonly = isOrderEditingLocked;
   const resolvedOrderId = currentOrderId ?? 'Новый заказ';
-  const calculatorReturnPath = currentOrderId ? `/orders/${currentOrderId}` : '/orders/new';
+  const sourceLeadSearch = sourceLeadId
+    ? `?${new URLSearchParams({
+        sourceLeadId,
+        ...(sourceLeadVersion ? { sourceLeadVersion: String(sourceLeadVersion) } : {}),
+      }).toString()}`
+    : '';
+  const calculatorReturnPath = currentOrderId ? `/orders/${currentOrderId}` : `/orders/new${sourceLeadSearch}`;
+  const calculatorPath = sourceLeadId ? `/calculator${sourceLeadSearch}` : '/calculator';
   const collapsedCustomerName = form.fullName.trim() || 'Новый клиент';
   const collapsedCustomerAddress = form.address.trim() || 'Адрес не указан';
   const collapsedCustomerStatusLabel =
@@ -505,6 +1123,7 @@ export const OrderDetailsPage = () => {
         width: position.width ?? 1300,
         height: position.height ?? 1400,
         price: position.price ?? 0,
+        schemeImage: getOpeningSchemeImage(position.openingType),
       })),
     [positions],
   );
@@ -520,12 +1139,21 @@ export const OrderDetailsPage = () => {
     [positionCards],
   );
 
+  const dealerProfitBeforeGlobalDiscount = useMemo(
+    () => positions.reduce((total, position) => total + getPositionDealerProfit(position), 0),
+    [positions],
+  );
+
+  const appliedWindowDiscount = Math.min(windowDiscount, dealerProfitBeforeGlobalDiscount, windowsTotal);
+  const dealerProfitAfterGlobalDiscount = Math.max(0, dealerProfitBeforeGlobalDiscount - appliedWindowDiscount);
+  const dealerProfitCode = buildDealerProfitCode(dealerProfitAfterGlobalDiscount);
+
   const servicesTotal = useMemo(
     () => services.reduce((total, service) => total + getServicePrice(service, totalArea), 0),
     [services, totalArea],
   );
 
-  const calculatedAmount = windowsTotal + servicesTotal;
+  const calculatedAmount = Math.max(0, windowsTotal - appliedWindowDiscount) + servicesTotal;
   const hasEditableBasket = positions.length > 0 || services.length > 0;
   const savedOrderAmount = hasEditableBasket ? calculatedAmount : currentOrderAmount;
   const orderTotalAmount = savedOrderAmount ?? 0;
@@ -559,6 +1187,7 @@ export const OrderDetailsPage = () => {
       if (didOrderChange) {
         setForm(getInitialFormValues(orderId, locationState));
         setServices(getInitialServices(orderId, locationState));
+        setWindowDiscount(getInitialWindowDiscount(orderId, locationState));
       }
 
       setPositions(getInitialPositions(orderId, shouldResetCalculatorPositions, locationState));
@@ -570,11 +1199,13 @@ export const OrderDetailsPage = () => {
     const localPositions = getInitialPositions(orderId, shouldResetCalculatorPositions, locationState);
     const localForm = getInitialFormValues(orderId, locationState);
     const localServices = getInitialServices(orderId, locationState);
+    const localWindowDiscount = getInitialWindowDiscount(orderId, locationState);
 
     setForm(localForm);
     setPositions(localPositions);
     setServices(localServices);
-    setRemoteOrderError(null);
+    setWindowDiscount(localWindowDiscount);
+    setRemoteOrderError(locationState?.leadConversionWarning ?? null);
     setRemoteOrderLoading(true);
     previousOrderIdRef.current = orderId;
 
@@ -588,15 +1219,15 @@ export const OrderDetailsPage = () => {
 
         const remotePositions = Array.isArray(locationState?.calculatorPositions)
           ? locationState.calculatorPositions.filter(isCalculatorPosition).map(normalizeCalculatorPosition)
-          : snapshot.positions;
+          : mergePositionSnapshots(snapshot.positions, localPositions);
         const nextForm = getLocationDraftForm(locationState) ?? snapshot.form;
         const nextServices = getLocationDraftServices(locationState) ?? snapshot.services;
 
-        setRemoteOrder(snapshot);
+        setRemoteOrder({ ...snapshot, positions: remotePositions });
         setForm(nextForm);
         setPositions(remotePositions);
         setServices(nextServices);
-        ordersStorage.saveOrder(snapshot.orderId, nextForm, snapshot.amount, remotePositions, nextServices);
+        ordersStorage.saveOrder(snapshot.orderId, nextForm, snapshot.amount, remotePositions, nextServices, localWindowDiscount);
       } catch (error) {
         if (isCancelled) {
           return;
@@ -617,6 +1248,41 @@ export const OrderDetailsPage = () => {
   }, [location.key, orderId, shouldResetCalculatorPositions, locationState, reloadRemoteOrderKey]);
 
   useEffect(() => {
+    if (orderId || !sourceLeadId || locationState?.draftForm) {
+      return;
+    }
+
+    let isCancelled = false;
+    void getLead(sourceLeadId)
+      .then((lead) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setForm((current) => ({
+          ...current,
+          fullName: current.fullName.trim() || lead.customer.name,
+          phone: current.phone.trim() || lead.customer.phone,
+          address:
+            current.address.trim() ||
+            lead.location.address ||
+            [lead.location.city, lead.location.region].filter(Boolean).join(', '),
+          measurementDate: current.measurementDate || lead.scheduledVisit?.date || '',
+          comment: current.comment.trim() || lead.factoryNotes || '',
+        }));
+      })
+      .catch((error) => {
+        if (!isCancelled) {
+          setRemoteOrderError(getErrorMessage(error));
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [locationState?.draftForm, orderId, sourceLeadId]);
+
+  useEffect(() => {
     if (!orderId && shouldResetCalculatorPositions) {
       clearCalculatorPositions();
     }
@@ -629,10 +1295,15 @@ export const OrderDetailsPage = () => {
   const buildOrderPayload = (resolvedId: string | null, userId: string, action: 'order_create' | 'order_refresh') => {
     const statusValue = currentOrderStatusValue ?? 'new';
     const statusLabel = getOrderStatusUi(statusValue).label;
+    const payment = action === 'order_create' ? buildOrderPaymentPayload(DEFAULT_ORDER_PAYMENT_SELECTION) : null;
 
     return {
       source: 'order-details',
       action,
+      source_lead_id: sourceLeadId,
+      sourceLeadId,
+      source_lead_version: sourceLeadVersion ?? null,
+      sourceLeadVersion: sourceLeadVersion ?? null,
       order_id: resolvedId,
       orderId: resolvedId,
       user_id: userId,
@@ -658,12 +1329,16 @@ export const OrderDetailsPage = () => {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         }),
+        windowDiscount: appliedWindowDiscount,
+        dealerProfitAmount: dealerProfitAfterGlobalDiscount,
+        dealerProfitCode,
         measurementDate: form.measurementDate || null,
         measurementDateLabel: measurementRangeLabel || '',
         productionDate: form.productionDate || null,
         productionDateLabel,
         installationDate: form.installationDate || null,
         installationDateLabel: installationRangeLabel || '',
+        ...(payment ? { payment } : {}),
       },
       summary: {
         positionsCount: positions.length,
@@ -673,6 +1348,11 @@ export const OrderDetailsPage = () => {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         }),
+        windowDiscount: appliedWindowDiscount,
+        windowDiscountLabel: formatCurrency(appliedWindowDiscount),
+        dealerProfitBeforeGlobalDiscount,
+        dealerProfitAfterGlobalDiscount,
+        dealerProfitCode,
         servicesTotal,
         servicesTotalLabel: formatCurrency(servicesTotal, {
           minimumFractionDigits: 2,
@@ -690,6 +1370,8 @@ export const OrderDetailsPage = () => {
         orderStatusLabel: statusLabel,
         positions: orderPositionLabels,
         services: orderServiceLabels,
+        windowDiscountLabel: formatCurrency(appliedWindowDiscount),
+        dealerProfitCode,
       },
       values: {
         order_id: resolvedId,
@@ -710,24 +1392,89 @@ export const OrderDetailsPage = () => {
         },
         positions: orderPositionValues,
         services: orderServiceValues,
+        windowDiscount: appliedWindowDiscount,
+        globalWindowDiscount: appliedWindowDiscount,
+        dealerProfitBeforeGlobalDiscount,
+        dealerProfitAfterGlobalDiscount,
+        dealerProfitCode,
+        ...(payment ? { payment } : {}),
         totals: {
           windowsTotal,
+          windowDiscount: appliedWindowDiscount,
           servicesTotal,
           totalArea,
           orderTotal: orderTotalAmount,
+          dealerProfitBeforeGlobalDiscount,
+          dealerProfitAfterGlobalDiscount,
+          dealerProfitCode,
         },
         rawForm: form,
         rawPositions: positions,
         rawServices: services,
       },
+      ...(payment ? { payment } : {}),
       savedAt: new Date().toISOString(),
     };
   };
 
-  const persistOrder = async (): Promise<string> => {
-    if (isReadonlyOrder) {
+  const buildInvoicePayload = (resolvedId: string) => {
+    const invoiceDiscountMoney = normalizeDiscountAmount(appliedWindowDiscount);
+    const products = positions
+      .map((position, index) => {
+        const productionQuery = position.productionQuery;
+        const openingType = position.openingType ?? 'single';
+        const individualDiscount = clampDealerDiscountPercent(position.dealerDiscountPercent ?? 0);
+        const productQuery: InvoiceProductQuery = productionQuery
+          ? (({ discount: _discount, ...queryWithoutDiscount }) => queryWithoutDiscount)(productionQuery)
+          : buildFallbackProductionQuery(position, openingType);
+        const invoiceProductQuery = buildCanonicalInvoiceProductQuery(productQuery, position, openingType);
+
+        return {
+          id: position.id ?? index + 1,
+          ...invoiceProductQuery,
+          discount: formatInvitecraftDiscount(individualDiscount),
+        };
+      })
+      .filter((product) => product.type_id > 0 && product.width > 0 && product.height > 0);
+
+    const works = services.map((service) => ({
+      name: service.type === 'installation' ? 'Монтаж' : 'Доставка',
+      quantity: 1,
+      price: getServicePrice(service, totalArea),
+    }));
+
+    return {
+      source: 'order-details',
+      action: 'get_data_invoice',
+      order_id: resolvedId,
+      orderId: resolvedId,
+      customer_name: form.fullName.trim(),
+      customerName: form.fullName.trim(),
+      customer_phone: formatInvoicePhone(form.phone),
+      customerPhone: formatInvoicePhone(form.phone),
+      customer_address: form.address.trim(),
+      customerAddress: form.address.trim(),
+      products,
+      works,
+      window_discount: appliedWindowDiscount,
+      global_window_discount: appliedWindowDiscount,
+      'discount-money': invoiceDiscountMoney,
+      discount_money: invoiceDiscountMoney,
+      dealer_profit_code: dealerProfitCode,
+      order: {
+        id: resolvedId,
+        code: summaryCode,
+        amount: orderTotalAmount,
+        windowDiscount: appliedWindowDiscount,
+        dealerProfitCode,
+      },
+    };
+  };
+
+  const persistOrder = async (): Promise<{ orderId: string; leadConversionWarning: string | null }> => {
+    if (isOrderFinalized) {
       if (currentOrderId) {
-        return currentOrderId;
+        return { orderId: currentOrderId, leadConversionWarning: null };
       }
 
       throw new Error('Редактирование сохраненного заказа недоступно.');
@@ -737,7 +1484,7 @@ export const OrderDetailsPage = () => {
     setRemoteOrderError(null);
 
     try {
-      const userId = await registerOrGetUser(form);
+      const userId = await registerOrGetUser(form, Boolean(currentOrderId));
       const payload = buildOrderPayload(currentOrderId, userId, currentOrderId ? 'order_refresh' : 'order_create');
       const { orderId: savedOrderId } = await saveRemoteOrder({
         orderId: currentOrderId,
@@ -745,12 +1492,33 @@ export const OrderDetailsPage = () => {
       });
       const snapshot = await getRemoteOrder(savedOrderId);
 
-      setRemoteOrder(snapshot);
+      const persistedPositions = mergePositionSnapshots(snapshot.positions, positions);
+
+      setRemoteOrder({ ...snapshot, positions: persistedPositions });
       setForm(snapshot.form);
-      setPositions(snapshot.positions);
+      setPositions(persistedPositions);
       setServices(snapshot.services);
-      ordersStorage.saveOrder(snapshot.orderId, snapshot.form, snapshot.amount, snapshot.positions, snapshot.services);
-      return snapshot.orderId;
+      ordersStorage.saveOrder(
+        snapshot.orderId,
+        snapshot.form,
+        orderTotalAmount,
+        persistedPositions,
+        snapshot.services,
+        appliedWindowDiscount,
+      );
+
+      let leadConversionWarning: string | null = null;
+
+      if (!currentOrderId && sourceLeadId) {
+        try {
+          await convertMeasurementLead(sourceLeadId, snapshot.orderId, sourceLeadVersion);
+        } catch {
+          leadConversionWarning =
+            'Заказ создан, но статус исходного лида пока не синхронизирован. Повторная обработка будет выполнена сервером.';
+        }
+      }
+
+      return { orderId: snapshot.orderId, leadConversionWarning };
     } catch (error) {
       setRemoteOrderError(getErrorMessage(error));
       throw error;
@@ -760,15 +1528,18 @@ export const OrderDetailsPage = () => {
   };
 
   const handleSaveDraft = async () => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
     try {
-      const savedOrderId = await persistOrder();
+      const { orderId: savedOrderId, leadConversionWarning } = await persistOrder();
 
       if (!currentOrderId || savedOrderId !== currentOrderId) {
-        navigate(`/orders/${savedOrderId}`, { replace: true });
+        navigate(`/orders/${savedOrderId}`, {
+          replace: true,
+          state: leadConversionWarning ? { leadConversionWarning } : null,
+        });
         return;
       }
 
@@ -779,24 +1550,70 @@ export const OrderDetailsPage = () => {
   };
 
   const handleOpenPayment = async () => {
-    if (isReadonlyOrder) {
+    if (isPreparingPayment) {
+      return;
+    }
+
+    if (isOrderFinalized) {
       if (currentOrderId) {
-        navigate(`/payment?orderId=${encodeURIComponent(currentOrderId)}`);
+        const invoiceParam = summaryCode ? `&invoiceNo=${encodeURIComponent(summaryCode)}` : '';
+        navigate(`/payment?orderId=${encodeURIComponent(currentOrderId)}${invoiceParam}`, {
+          state: {
+            invoiceNo: summaryCode || null,
+            amount: orderTotalAmount,
+            windowDiscount: appliedWindowDiscount,
+          },
+        });
       }
 
       return;
     }
 
     try {
-      const savedOrderId = await persistOrder();
-      navigate(`/payment?orderId=${encodeURIComponent(savedOrderId)}`);
-    } catch {
+      setPreparingPayment(true);
+      setRemoteOrderError(null);
+      const { orderId: savedOrderId, leadConversionWarning } = await persistOrder();
+      const invoicePayload = buildInvoicePayload(savedOrderId);
+
+      const invoice = await requestRemoteInvoice(invoicePayload);
+
+      if (invoice.invoiceNo === null) {
+        throw new Error('InviteCraft не вернул номер счета для печати КП.');
+      }
+
+      const nextOrderCode = invoice.orderCode ?? String(invoice.invoiceNo);
+      const finalOrderAmount = orderTotalAmount;
+
+      const nextForm = { ...form, contractNumber: nextOrderCode };
+      setForm(nextForm);
+      setRemoteOrder((currentOrder) => (currentOrder ? { ...currentOrder, code: nextOrderCode, amount: finalOrderAmount } : currentOrder));
+      ordersStorage.saveOrder(savedOrderId, nextForm, finalOrderAmount, positions, services, appliedWindowDiscount);
+      await updateRemoteOrderCode({ orderId: savedOrderId, orderCode: nextOrderCode });
+
+      const invoicePdf = await requestRemoteInvoicePdf({ invoiceNo: invoice.invoiceNo });
+      const invoiceParam = `&invoiceNo=${encodeURIComponent(String(invoice.invoiceNo))}`;
+
+      downloadFileUrl(invoicePdf.pdfUrl, invoicePdf.fileName);
+      navigate(`/payment?orderId=${encodeURIComponent(savedOrderId)}${invoiceParam}`, {
+        state: {
+          invoiceNo: invoice.invoiceNo,
+          invoicePdfUrl: invoicePdf.pdfUrl,
+          invoicePdfFileName: invoicePdf.fileName,
+          amount: finalOrderAmount,
+          windowDiscount: appliedWindowDiscount,
+          leadConversionWarning,
+        },
+      });
+    } catch (error) {
+      setRemoteOrderError(getErrorMessage(error));
       return;
+    } finally {
+      setPreparingPayment(false);
     }
   };
 
   const handlePhoneChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -804,7 +1621,7 @@ export const OrderDetailsPage = () => {
   };
 
   const handleMeasurementDateChange = (nextValue: string) => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -812,7 +1629,7 @@ export const OrderDetailsPage = () => {
   };
 
   const handleProductionDateChange = (nextValue: string) => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -821,7 +1638,7 @@ export const OrderDetailsPage = () => {
   };
 
   const handleInstallationDateChange = (nextValue: string) => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -830,7 +1647,7 @@ export const OrderDetailsPage = () => {
   };
 
   const copyPosition = (positionId: number): void => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -847,7 +1664,7 @@ export const OrderDetailsPage = () => {
   };
 
   const removePosition = async (positionId: number): Promise<void> => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -865,40 +1682,47 @@ export const OrderDetailsPage = () => {
   };
 
   const handleAddWindow = (): void => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
     const nextId = positions.length > 0 ? Math.max(...positions.map((item) => item.id)) + 1 : 1;
     writeCalculatorPositions(positions);
-    navigate('/calculator', {
+    navigate(calculatorPath, {
       state: {
         positionId: nextId,
         returnTo: calculatorReturnPath,
         draftForm: form,
         draftServices: services,
+        draftWindowDiscount: appliedWindowDiscount,
+        sourceLeadId,
+        sourceLeadVersion,
       },
     });
   };
 
-  const openCalculatorForPosition = (positionId: number): void => {
-    if (isReadonlyOrder) {
+  const openCalculatorForPosition = (positionId: number, readOnly = false): void => {
+    if (isOrderEditingLocked && !readOnly) {
       return;
     }
 
     writeCalculatorPositions(positions);
-    navigate('/calculator', {
+    navigate(calculatorPath, {
       state: {
         positionId,
+        readOnly,
         returnTo: calculatorReturnPath,
         draftForm: form,
         draftServices: services,
+        draftWindowDiscount: appliedWindowDiscount,
+        sourceLeadId,
+        sourceLeadVersion,
       },
     });
   };
 
   const openAddServiceDialog = (): void => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -907,7 +1731,7 @@ export const OrderDetailsPage = () => {
   };
 
   const openInstallationDialog = (): void => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -917,7 +1741,7 @@ export const OrderDetailsPage = () => {
   };
 
   const openDeliveryDialog = (): void => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -932,8 +1756,27 @@ export const OrderDetailsPage = () => {
     setServiceDialogType(null);
   };
 
+  const openWindowDiscountDialog = (): void => {
+    if (isOrderEditingLocked) {
+      return;
+    }
+
+    setWindowDiscountInput(String(appliedWindowDiscount));
+    setWindowDiscountDialogOpen(true);
+  };
+
+  const saveWindowDiscount = (): void => {
+    if (isOrderEditingLocked) {
+      return;
+    }
+
+    const nextDiscount = Math.min(parseMoneyInput(windowDiscountInput), dealerProfitBeforeGlobalDiscount, windowsTotal);
+    setWindowDiscount(normalizeDiscountAmount(nextDiscount));
+    setWindowDiscountDialogOpen(false);
+  };
+
   const saveInstallationService = async (): Promise<void> => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -944,7 +1787,7 @@ export const OrderDetailsPage = () => {
     };
     const nextServices = upsertService(services, nextService);
     const nextServicesTotal = nextServices.reduce((total, service) => total + getServicePrice(service, totalArea), 0);
-    const nextOrderAmount = windowsTotal + nextServicesTotal;
+    const nextOrderAmount = Math.max(0, windowsTotal - appliedWindowDiscount) + nextServicesTotal;
     const statusValue = currentOrderStatusValue ?? 'new';
     const statusLabel = getOrderStatusUi(statusValue).label;
     const basePrice = Math.round(totalArea * INSTALLATION_RATE_PER_SQUARE);
@@ -1050,7 +1893,7 @@ export const OrderDetailsPage = () => {
   };
 
   const saveDeliveryService = async (): Promise<void> => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -1062,7 +1905,7 @@ export const OrderDetailsPage = () => {
     };
     const nextServices = upsertService(services, nextService);
     const nextServicesTotal = nextServices.reduce((total, service) => total + getServicePrice(service, totalArea), 0);
-    const nextOrderAmount = windowsTotal + nextServicesTotal;
+    const nextOrderAmount = Math.max(0, windowsTotal - appliedWindowDiscount) + nextServicesTotal;
     const statusValue = currentOrderStatusValue ?? 'new';
     const statusLabel = getOrderStatusUi(statusValue).label;
     const serviceLabels = buildServiceLabels(nextServices, totalArea);
@@ -1152,7 +1995,7 @@ export const OrderDetailsPage = () => {
   };
 
   const removeService = async (serviceType: OrderService['type']): Promise<void> => {
-    if (isReadonlyOrder) {
+    if (isOrderEditingLocked) {
       return;
     }
 
@@ -1182,8 +2025,10 @@ export const OrderDetailsPage = () => {
             <ArrowLeft className="h-4 w-4" />
           </button>
           <h1 className="text-center text-lg font-bold text-ink-800">Детали заказа</h1>
-          {isReadonlyOrder ? (
-            <span className="justify-self-end text-xs font-semibold uppercase tracking-wide text-slate-400">Просмотр</span>
+          {isOrderEditingLocked ? (
+            <span className="justify-self-end text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {isPreparingPayment ? 'Оформление' : 'Просмотр'}
+            </span>
           ) : (
             <button
               type="button"
@@ -1209,9 +2054,13 @@ export const OrderDetailsPage = () => {
             </div>
           ) : null}
 
-          {isReadonlyOrder ? (
+          {isOrderEditingLocked ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Заказ в финальном статусе и доступен только для просмотра.
+              {isPreparingPayment
+                ? 'Формируем КП. Изменение заказа временно заблокировано.'
+                : isQuoteCreated
+                  ? 'КП уже сформировано. Состав заказа и скидки зафиксированы.'
+                  : 'Заказ в финальном статусе и доступен только для просмотра.'}
             </div>
           ) : null}
 
@@ -1374,10 +2223,12 @@ export const OrderDetailsPage = () => {
                 {positionCards.map((position) => (
                   <article key={position.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
                     <div className="mb-3 flex items-start gap-3">
-                      <div className="inline-flex shrink-0 h-20 w-20 items-center justify-center rounded-xl border border-slate-300 bg-slate-100">
-                        <div className="h-10 w-10 border border-slate-400">
-                          <div className="h-full w-1/2 border-r border-slate-400" />
-                        </div>
+                      <div className="inline-flex h-20 w-24 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white p-2">
+                        <img
+                          src={position.schemeImage}
+                          alt="Типовая схема окна"
+                          className="h-full w-full object-contain"
+                        />
                       </div>
                       <div className="min-w-0">
                         <p className="text-lg font-extrabold text-ink-800">Позиция {position.id}</p>
@@ -1394,9 +2245,37 @@ export const OrderDetailsPage = () => {
                           ? formatCurrency(position.price, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                           : '—'}
                       </p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-lg border border-slate-200 bg-slate-100 px-2 py-2">
+                          <p className="font-semibold uppercase tracking-wide text-slate-500">Скидка</p>
+                          <p className="mt-1 font-extrabold text-ink-800">
+                            {clampDealerDiscountPercent(position.dealerDiscountPercent ?? 0)}%
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-100 px-2 py-2">
+                          <p className="font-semibold uppercase tracking-wide text-slate-500">PRFT</p>
+                          <p className="mt-1 font-extrabold text-ink-800">
+                            {buildDealerProfitCode(getPositionDealerProfit(position))}
+                          </p>
+                        </div>
+                      </div>
+                      {position.sashes?.some((sash) => sash.mosquitoScreenEnabled) ? (
+                        <p className="text-sm font-semibold text-slate-500">
+                          Москитная сетка: {position.sashes.filter((sash) => sash.mosquitoScreenEnabled).length} створ.
+                        </p>
+                      ) : null}
 
                       <div className="mt-2 flex items-center gap-2">
-                        {isReadonlyOrder ? null : (
+                        {isOrderEditingLocked ? (
+                          <button
+                            type="button"
+                            onClick={() => openCalculatorForPosition(position.id, true)}
+                            className="ml-auto inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-slate-100 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Посмотреть
+                          </button>
+                        ) : (
                           <>
                             <button
                               type="button"
@@ -1435,7 +2314,7 @@ export const OrderDetailsPage = () => {
               </div>
             )}
 
-            {isReadonlyOrder ? null : (
+            {isOrderEditingLocked ? null : (
               <div className="mt-4">
                 <button
                   type="button"
@@ -1455,7 +2334,7 @@ export const OrderDetailsPage = () => {
                     <h2 className="text-2xl font-extrabold tracking-tight text-ink-800">
                   Услуги
                   </h2>
-                  {isReadonlyOrder ? null : (
+                  {isOrderEditingLocked ? null : (
                     <button
                       type="button"
                       onClick={openAddServiceDialog}
@@ -1503,7 +2382,7 @@ export const OrderDetailsPage = () => {
                         <p className="text-sm text-slate-500">{subtitle}</p>
                       </div>
                       <p className="text-xl font-extrabold text-ink-800">{formatCurrency(price)}</p>
-                      {isReadonlyOrder ? null : (
+                      {isOrderEditingLocked ? null : (
                         <button
                           type="button"
                           onClick={isInstallation ? openInstallationDialog : openDeliveryDialog}
@@ -1524,14 +2403,39 @@ export const OrderDetailsPage = () => {
             )}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+          <section className="relative rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            {isOrderEditingLocked ? null : (
+              <button
+                type="button"
+                onClick={openWindowDiscountDialog}
+                className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-ink-800 hover:bg-slate-200"
+                aria-label="Общая скидка"
+              >
+                <Percent className="h-5 w-5" />
+              </button>
+            )}
 
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Код</p>
-                <p className="mt-1 text-sm font-bold text-ink-800">{summaryCode}</p>
+            <div className="pr-11">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Код</p>
+              <p className="mt-1 min-h-6 text-sm font-bold text-ink-800">{summaryCode}</p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-200 pt-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">PRFT</p>
+                <p className="mt-1 text-lg font-extrabold text-ink-800">{dealerProfitCode}</p>
               </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Скидка</p>
+                <p className="mt-1 text-lg font-extrabold text-ink-800">{formatCurrency(appliedWindowDiscount)}</p>
+              </div>
+            </div>
 
-
+            {appliedWindowDiscount > 0 ? (
+              <div className="mt-3 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-semibold text-ink-800">
+                Применена общая скидка на оконные позиции: {formatCurrency(appliedWindowDiscount)}
+              </div>
+            ) : null}
 
             <div className="mt-4 flex flex-col gap-4 border-t border-slate-200 pt-4">
               <div>
@@ -1552,13 +2456,72 @@ export const OrderDetailsPage = () => {
 
           <Button
             className="h-14 text-base"
-            disabled={isSubmittingOrder || isRemoteOrderLoading}
+            disabled={isSubmittingOrder || isRemoteOrderLoading || isPreparingPayment}
             onClick={handleOpenPayment}
           >
-            {isSubmittingOrder ? 'Сохраняем заказ...' : 'Перейти к оплате >'}
+            {isPreparingPayment
+              ? 'Получаем КП...'
+              : isSubmittingOrder
+                ? 'Сохраняем заказ...'
+                : isOrderFinalized
+                  ? 'Перейти к оплате'
+                  : 'Заказать КП'}
           </Button>
         </section>
       </main>
+
+      {isWindowDiscountDialogOpen ? (
+        <div className="fixed inset-0 z-20 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">
+          <div className="w-full max-w-[540px] rounded-xl bg-surface p-4 shadow-panel">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-extrabold text-ink-800">Общая скидка</h3>
+                <p className="text-sm text-slate-500">Скидка применяется к оконным позициям</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWindowDiscountDialogOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                aria-label="Закрыть"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-slate-500">Доступная прибыль</span>
+                <span className="font-bold text-ink-800">{formatCurrency(dealerProfitBeforeGlobalDiscount)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                <span className="text-slate-500">Применено сейчас</span>
+                <span className="font-bold text-ink-800">{formatCurrency(appliedWindowDiscount)}</span>
+              </div>
+            </div>
+
+            <TextField
+              label="Скидка на оконные позиции, ₽"
+              inputMode="numeric"
+              value={windowDiscountInput}
+              onChange={(event) => setWindowDiscountInput(event.target.value.replace(/[^\d]/g, ''))}
+              placeholder="0"
+            />
+
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setWindowDiscountDialogOpen(false)}
+                className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Отмена
+              </button>
+              <Button className="h-12 flex-1 text-base" onClick={saveWindowDiscount}>
+                Применить скидку
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isServiceDialogOpen ? (
         <div className="fixed inset-0 z-20 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">

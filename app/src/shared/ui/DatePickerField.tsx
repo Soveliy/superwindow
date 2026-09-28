@@ -126,6 +126,18 @@ export const DatePickerField = ({
     return false;
   };
 
+  const tileClassName: NonNullable<CalendarProps['tileClassName']> = ({ date, view }) => {
+    if (view !== 'month') {
+      return null;
+    }
+
+    const isoDate = toIsoDate(date);
+    const isAllowed = !allowedDatesSet || allowedDatesSet.has(isoDate);
+    const isDisabled = !isAllowed || Boolean(isDateDisabled?.(isoDate, date));
+
+    return isDisabled ? 'superwindow-calendar__tile-disabled' : 'superwindow-calendar__tile-available';
+  };
+
   return (
     <div ref={rootRef} className="relative flex flex-col gap-2">
       <span className="text-xs font-semibold uppercase tracking-wide text-ink-700">{label}</span>
@@ -159,6 +171,7 @@ export const DatePickerField = ({
             maxDate={maxDateValue ?? undefined}
             value={selectedDate}
             onChange={handleCalendarChange}
+            tileClassName={tileClassName}
             tileDisabled={tileDisabled}
             className="superwindow-calendar"
           />

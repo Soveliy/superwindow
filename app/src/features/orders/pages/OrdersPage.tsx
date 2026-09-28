@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Store } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
 import { getRemoteOrders, type RemoteOrderListItem } from '@/features/orders/api/order-rest';
@@ -197,6 +197,13 @@ export const OrdersPage = () => {
         <section className="relative min-h-[calc(100vh-1.5rem)] flex-1 px-4 pb-36 pt-5">
           <header className="mb-4 flex items-center justify-between">
             <h1 className="text-[42px] font-extrabold leading-none tracking-tight text-ink-800">Заказы</h1>
+            <Link
+              to="/leads"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-slate-100 px-3 text-sm font-bold text-ink-700 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              <Store className="h-4 w-4" aria-hidden="true" />
+              Лиды
+            </Link>
           </header>
 
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">

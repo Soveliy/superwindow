@@ -11,26 +11,74 @@ function getUserLogin($query)
     //     return ['error' => 'Only POST'];
     // }
 
+    $data = json_decode(file_get_contents('php://input'), true);
+    $data = is_array($data) ? $data : [];
+    $query = array_merge(is_array($query) ? $query : [], $data);
+
     global $USER;
 
-    if ($USER->IsAuthorized()) {
-        return ['success' => true];
-    }
-
-    $login = trim($query['login'] ?? '');
+    $login = trim($query['login'] ?? $query['emailOrDealerId'] ?? $query['email'] ?? '');
     $password = trim($query['password'] ?? '');
+    $remember = filter_var($query['remember'] ?? $query['rememberMe'] ?? true, FILTER_VALIDATE_BOOLEAN);
 
     if (!$login || !$password) {
-        return ['error' => 'Empty login or password'];
+        http_response_code(400);
+        return [
+            'success' => false,
+            'message' => 'Введите логин и пароль',
+        ];
     }
 
-    $result = $USER->Login($login, $password, "Y");
+    if (!Loader::includeModule('main')) {
+        http_response_code(500);
+        return [
+            'success' => false,
+            'message' => 'Не удалось подключить модуль пользователей',
+        ];
+    }
+
+    $result = $USER->Login($login, $password, $remember ? 'Y' : 'N');
 
     if ($result !== true) {
-        return ['error' => $result['MESSAGE']];
+        http_response_code(401);
+        return [
+            'success' => false,
+            'message' => strip_tags($result['MESSAGE'] ?? 'Неверный логин или пароль'),
+        ];
     }
 
-    return ['success' => true];
+    $userId = (int)$USER->GetID();
+    $userData = [];
+
+    if ($userId > 0) {
+        $rsUser = CUser::GetByID($userId);
+        $userData = $rsUser ? ($rsUser->Fetch() ?: []) : [];
+    }
+
+    $fullName = trim(implode(' ', array_filter([
+        $userData['LAST_NAME'] ?? '',
+        $userData['NAME'] ?? '',
+        $userData['SECOND_NAME'] ?? '',
+    ])));
+    $userLogin = $userData['LOGIN'] ?? $login;
+    $userEmail = $userData['EMAIL'] ?? '';
+    $userName = $fullName ?: $userLogin;
+
+    return [
+        'success' => true,
+        'token' => function_exists('bitrix_sessid') ? bitrix_sessid() : session_id(),
+        'dealerId' => $userId ?: $login,
+        'user_id' => $userId,
+        'login' => $userLogin,
+        'email' => $userEmail,
+        'name' => $userName,
+        'user' => [
+            'id' => $userId,
+            'login' => $userLogin,
+            'email' => $userEmail,
+            'name' => $userName,
+        ],
+    ];
 }
 
 // ВЫХОД ПОЛЬЗОВАТЕЛЯ
@@ -42,7 +90,9 @@ function getUserLogout()
     // }
 
     global $USER;
-    $USER->Logout();
+    if ($USER && $USER->IsAuthorized()) {
+        $USER->Logout();
+    }
 
     return ['success' => true];
 }
@@ -112,7 +162,7 @@ function getUserLogout()
 //     return ['error' => $user->LAST_ERROR];
 // }
 
-function userRegisterOrGet($query)
+function userRegisterOrGet($query, $isUpdate = false)
 {
     // Защита
     // if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -120,15 +170,36 @@ function userRegisterOrGet($query)
     // }
 
     $data = json_decode(file_get_contents('php://input'), true);
+    $data = is_array($data) ? $data : [];
+    $query = array_merge(is_array($query) ? $query : [], $data);
+    $isUpdate = $isUpdate || filter_var($query['is_update'] ?? $query['isUpdate'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
-    $phone = normalPhone($data['phone']);
-    $name = parseFio($data['customerName']);
+    $phone = normalPhone($query['phone'] ?? '');
+    $name = parseFio($query['customerName'] ?? $query['fio'] ?? '');
     $rsUser = CUser::GetByLogin($phone);
+
+    // 1. Удаляем всё, кроме цифр и знака "+"
+    $cleanPhone = preg_replace('/[^\d+]/', '', $phone);
+
+    // 2. Нормализация (если номер начинается с 8 или 7 без плюса)
+    if (preg_match('/^8\d{10}$/', $cleanPhone)) {
+        $cleanPhone = '+7' . substr($cleanPhone, 1);
+    } elseif (preg_match('/^7\d{10}$/', $cleanPhone)) {
+        $cleanPhone = '+' . $cleanPhone;
+    }
     
     if ($user = $rsUser->Fetch()) {
 
         // SMS
-        sendSms($phone, "Вы оформили заказ");
+        // sendSms($phone, "Вы оформили заказ");
+        $arrSms = [
+            'phone' => $phone,
+            'text' => "Вы оформили заказ"
+        ];
+
+        if (!$isUpdate) {
+            sendSms($arrSms);
+        }
 
         return [
             'user_id' => $user['ID'],
@@ -141,7 +212,8 @@ function userRegisterOrGet($query)
 
     $fields = [
         'LOGIN' => $phone,
-        'PERSONAL_PHONE' => $phone,
+        'PERSONAL_PHONE' => $cleanPhone,
+        'PHONE_NUMBER' => $cleanPhone,
         'NAME' => $name['NAME'],
         'LAST_NAME' => $name['LAST_NAME'],
         'SECOND_NAME' => $name['SECOND_NAME'],
@@ -153,7 +225,13 @@ function userRegisterOrGet($query)
     $id = $user->Add($fields);
 
     if ($id > 0) {
-        sendSms($phone, "Регистрация успешна. Ваш пароль: $password");
+
+        $arrSms = [
+            'phone' => $phone,
+            'text' => "Регистрация успешна. Для входа перейдите по ссылке https://aspro.galereyaokon.com/auth/"
+        ];
+
+        sendSms($arrSms);
 
         return [
             'user_id' => $id,
@@ -193,7 +271,34 @@ function parseFio($fio) {
     ];
 }
 
-function sendSms($phone, $text)
+function sendSms($query)
 {
-    // заглушка для отправки смс
+    file_put_contents(__DIR__ . "/log_sms.txt", print_r($query,1));
+
+    $phone = $query['phone'];
+    $text  = $query['text'];
+
+    // защита
+    if (empty($phone) || empty($text)) {
+        return ['success' => false, 'error' => 'Empty phone or text'];
+    }
+
+    // вызов оригинальной функции
+    $result = send_sms($phone, $text, 0);
+
+    // разбор ответа
+    if ($result[1] > 0) {
+        return [
+            'success' => true,
+            'id' => $result[0],
+            'count' => $result[1],
+            'cost' => $result[2] ?? null
+        ];
+    }
+
+    return [
+        'success' => false,
+        'error_code' => $result[1],
+        'error' => $result[0]
+    ];
 }

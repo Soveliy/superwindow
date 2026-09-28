@@ -11,21 +11,22 @@ import {
   ArrowLeft,
   Check,
   ChevronRight,
-  Crown,
   Minus,
   Pencil,
+  Percent,
   Plus,
-  ShieldCheck,
   Trash2,
-  Wallet,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { BottomNav } from '@/app/layout/BottomNav';
 import {
   type AdditionalOptionType,
   type CalculatorAdditionalOption,
   type CalculatorPosition,
+  type CalculatorProductionQuery,
+  type CalculatorSashConfig,
+  type DripColor,
   type DrainageType,
   type HandleColor,
   type HandleType,
@@ -33,8 +34,10 @@ import {
   type MullionOrientation,
   type OpeningType,
   type PackageType,
+  type SashId,
   type SealColor,
   type SillColor,
+  type SillType,
   type WindowColor,
   type WindowColorSide,
   readCalculatorPositions,
@@ -52,9 +55,13 @@ type ProfileId = 'rula-58' | 'isotech-58' | 'grunder-60' | 'wintech-70' | 'expro
 interface CalculatorLocationState {
   positionId?: number;
   resetPositions?: boolean;
+  readOnly?: boolean;
   returnTo?: string;
   draftForm?: OrderCustomerForm;
   draftServices?: OrderService[];
+  draftWindowDiscount?: number;
+  sourceLeadId?: string;
+  sourceLeadVersion?: number;
 }
 
 interface DraftState {
@@ -63,6 +70,7 @@ interface DraftState {
   packageType: PackageType;
   openingType: OpeningType;
   profileId: ProfileId;
+  dealerDiscountPercent: number;
   drainage: DrainageType;
   sealColor: SealColor;
   windowColorSide: WindowColorSide;
@@ -72,21 +80,77 @@ interface DraftState {
   mullionOrientation: MullionOrientation;
   mullionOffsets: MullionOffsets;
   additionalOptions: CalculatorAdditionalOption[];
+  sashes: CalculatorSashConfig[];
 }
 
 interface OptionFormState {
   type: AdditionalOptionType;
   length: number;
   width: number;
+  sillType: SillType;
   sillColor: SillColor;
+  dripColor: DripColor;
 }
 
 type MullionControlMode = 'drag' | 'input';
 type DimensionField = 'width' | 'height';
 type DimensionInputState = Record<DimensionField, string>;
 type DimensionErrorState = Record<DimensionField, string | null>;
+type RemotePriceStatus = 'idle' | 'loading' | 'success' | 'error';
+type UnknownRecord = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const normalizeRemotePrice = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value.replace(/\s+/g, '').replace(',', '.'));
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+
+  return null;
+};
+
+const extractRemotePrice = (response: unknown): number | null => {
+  if (!isRecord(response)) {
+    return null;
+  }
+
+  return normalizeRemotePrice(response.serverPrice) ?? normalizeRemotePrice(response.price) ?? normalizeRemotePrice(response.amount);
+};
+
+const hasPayload = (value: unknown): value is { payload: unknown } =>
+  value !== null && typeof value === 'object' && 'payload' in value;
+
+const extractRemoteErrorMessage = (value: unknown): string | null => {
+  if (hasPayload(value)) {
+    return extractRemoteErrorMessage(value.payload);
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return (
+    extractRemoteErrorMessage(value.payload) ??
+    extractRemoteErrorMessage(value.responsePayload) ??
+    extractRemoteErrorMessage(value.response) ??
+    (typeof value.message === 'string' && value.message.trim().length > 0 ? value.message : null)
+  );
+};
+
+const getRemotePriceErrorMessage = (error: unknown): string =>
+  extractRemoteErrorMessage(error) ??
+  (error instanceof Error && error.message.trim().length > 0
+    ? error.message
+    : 'Не удалось получить цену c сервера');
 
 const withBase = (path: string): string => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+const accadoHandleImage = withBase('/handles/accado.png');
 const extractOrderIdFromReturnPath = (value: string): string | null => {
   const match = value.match(/^\/orders\/([^/?#]+)$/);
   return match ? decodeURIComponent(match[1]) : null;
@@ -123,7 +187,7 @@ const openingTypeOptions: Array<{ id: OpeningType; label: string; factor: number
   { id: 'triple', label: 'Трехстворчатое окно', factor: 1.93, image: withBase('/windows/3.svg') },
   { id: 'triple_dual_active', label: 'Трехстворчатое окно (две активные)', factor: 2.03, image: withBase('/windows/2.svg') },
   // { id: 'triple_full_active', label: 'Трехстворчатое окно (три активные)', factor: 2.14, image: withBase('/windows/7.svg') },
-  { id: 'balcony', label: 'Балконная дверь', factor: 2.12, image: withBase('/windows/1.svg') },
+  // { id: 'balcony', label: 'Балконная дверь', factor: 2.12, image: withBase('/windows/1.svg') },
 ];
 
 const openingTypeLabels = openingTypeOptions.reduce<Record<OpeningType, string>>((acc, option) => {
@@ -150,12 +214,6 @@ const packageOptions: Array<{ id: PackageType; label: string; factor: number }> 
   { id: 'premium', label: 'Премиум', factor: 1.26 },
 ];
 
-const packageIcons: Record<PackageType, LucideIcon> = {
-  budget: Wallet,
-  standard: ShieldCheck,
-  premium: Crown,
-};
-
 const packageLabels = packageOptions.reduce<Record<PackageType, string>>((acc, option) => {
   acc[option.id] = option.label;
   return acc;
@@ -163,8 +221,7 @@ const packageLabels = packageOptions.reduce<Record<PackageType, string>>((acc, o
 
 const sealColorOptions: Array<{ id: SealColor; label: string; extra: number }> = [
   { id: 'black', label: 'Черный', extra: 0 },
-  { id: 'gray', label: 'Серый', extra: 180 },
-  { id: 'white', label: 'Белый', extra: 220 },
+  { id: 'gray', label: 'Серый ', extra: 180 },
 ];
 
 const drainageOptions: Array<{ id: DrainageType; label: string; extra: number }> = [
@@ -176,7 +233,7 @@ const drainageOptions: Array<{ id: DrainageType; label: string; extra: number }>
 const sealColorLabels = sealColorOptions.reduce<Record<SealColor, string>>((acc, option) => {
   acc[option.id] = option.label;
   return acc;
-}, { black: 'Черный', gray: 'Серый', white: 'Белый' });
+}, { black: 'Черный', gray: 'Серый ', white: 'Белый' });
 
 const drainageLabels = drainageOptions.reduce<Record<DrainageType, string>>((acc, option) => {
   acc[option.id] = option.label;
@@ -195,12 +252,12 @@ const windowColorOptions: Array<{
   extra: number;
   swatchClassName: string;
 }> = [
-  { id: 'white', label: 'Белый', extra: 0, swatchClassName: 'bg-slate-100' },
+  { id: 'white', label: 'Белый', extra: 0, swatchClassName: 'bg-white' },
   { id: 'anthracite', label: 'Антрацит', extra: 600, swatchClassName: 'bg-slate-500' },
   { id: 'golden_oak', label: 'Золотой дуб', extra: 780, swatchClassName: 'bg-amber-400' },
   { id: 'dark_oak', label: 'Темный дуб', extra: 820, swatchClassName: 'bg-amber-950' },
-  { id: 'mahogany', label: 'Махагон', extra: 720, swatchClassName: 'bg-orange-800' },
-  { id: 'silver', label: 'Серебро', extra: 740, swatchClassName: 'bg-gradient-to-br from-slate-100 via-slate-300 to-slate-600' },
+  { id: 'mahogany', label: 'Африканская вишня', extra: 720, swatchClassName: 'bg-orange-800' },
+  { id: 'silver', label: 'Кварц серый', extra: 740, swatchClassName: 'bg-gradient-to-br from-slate-100 via-slate-300 to-slate-600' },
 ];
 
 const windowColorSideLabels = windowColorSideOptions.reduce<Record<WindowColorSide, string>>((acc, option) => {
@@ -216,14 +273,12 @@ const windowColorLabels = windowColorOptions.reduce<Record<WindowColor, string>>
   anthracite: 'Антрацит',
   golden_oak: 'Золотой дуб',
   dark_oak: 'Темный дуб',
-  mahogany: 'Махагон',
-  silver: 'Серебро',
+  mahogany: 'Африканская вишня',
+  silver: 'Кварц серый',
 });
 
 const handleTypeOptions: Array<{ id: HandleType; label: string; extra: number }> = [
-  { id: 'standard', label: 'Стандарт', extra: 0 },
-  { id: 'premium', label: 'Премиум', extra: 420 },
-  { id: 'design', label: 'Дизайн', extra: 680 },
+  { id: 'standard', label: 'ACCADO', extra: 0 },
 ];
 
 const handleColorOptions: Array<{
@@ -233,30 +288,87 @@ const handleColorOptions: Array<{
   swatchClassName: string;
 }> = [
   { id: 'white', label: 'Белый', extra: 0, swatchClassName: 'bg-white' },
-  { id: 'brown', label: 'Коричневый', extra: 140, swatchClassName: 'bg-amber-950' },
-  { id: 'silver', label: 'Серебро', extra: 160, swatchClassName: 'bg-slate-300' },
-  { id: 'gold', label: 'Золото', extra: 220, swatchClassName: 'bg-yellow-400' },
+  { id: 'anthracite', label: 'Антрацит', extra: 0, swatchClassName: 'bg-slate-500' },
+  { id: 'brown', label: 'Коричневый', extra: 0, swatchClassName: 'bg-amber-950' },
+  { id: 'light_brown', label: 'Светлокоричневый', extra: 0, swatchClassName: 'bg-orange-800' },
+  { id: 'black', label: 'Черный', extra: 0, swatchClassName: 'bg-black' },
 ];
 const sillColorOptions: Array<{ id: SillColor; label: string; extra: number }> = [
   { id: 'white', label: 'Белый', extra: 0 },
-  { id: 'brown', label: 'Коричневый', extra: 260 },
-  { id: 'anthracite', label: 'Антрацит', extra: 380 },
 ];
+const sillTypeOptions: Array<{ id: SillType; label: string }> = [
+  { id: 'fineber', label: 'Fineber' },
+];
+const SUPPORTED_DRIP_DEPTH = 180;
+const dripColorOptions: Array<{ id: DripColor; label: string; swatchClassName: string }> = [
+  { id: 'white', label: 'Белый', swatchClassName: 'bg-white' },
+  { id: 'brown', label: 'Коричневый', swatchClassName: 'bg-amber-950' },
+  { id: 'gray', label: 'Серый ', swatchClassName: 'bg-slate-500' },
+];
+const sillDepthOptions = Array.from({ length: 11 }, (_, index) => 100 + index * 50);
+const dripDepthOptions = [SUPPORTED_DRIP_DEPTH];
 
 const handleTypeLabels = handleTypeOptions.reduce<Record<HandleType, string>>((acc, option) => {
   acc[option.id] = option.label;
   return acc;
-}, { standard: 'Стандарт', premium: 'Премиум', design: 'Дизайн' });
+}, { standard: 'ACCADO', premium: 'Премиум', design: 'Дизайн' });
 
 const handleColorLabels = handleColorOptions.reduce<Record<HandleColor, string>>((acc, option) => {
   acc[option.id] = option.label;
   return acc;
-}, { white: 'Белый', brown: 'Коричневый', silver: 'Серебро', gold: 'Золото' });
+}, {
+  white: 'Белый',
+  anthracite: 'Антрацит',
+  brown: 'Коричневый',
+  light_brown: 'Светлокоричневый',
+  black: 'Черный',
+});
+
+const productionHandleColorLabels: Record<HandleColor, string> = {
+  white: ' БЕЛЫЙ',
+  anthracite: 'АНТРАЦИТ',
+  brown: 'КОРИЧНЕВЫЙ',
+  light_brown: 'СВЕТЛОКОРИЧНЕВЫЙ',
+  black: 'ЧЁРНЫЙ',
+};
 
 const sillColorLabels = sillColorOptions.reduce<Record<SillColor, string>>((acc, option) => {
   acc[option.id] = option.label;
   return acc;
 }, { white: 'Белый', brown: 'Коричневый', anthracite: 'Антрацит' });
+
+const sillTypeLabels = sillTypeOptions.reduce<Record<SillType, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { fineber: 'Fineber', komfort: 'KOMFORT' });
+const dripColorLabels = dripColorOptions.reduce<Record<DripColor, string>>((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, { white: 'Белый', brown: 'Коричневый', gray: 'Серый ' });
+const productionWindowColorLabels: Record<WindowColor, string> = {
+  white: '  Белый',
+  anthracite: '  Белый/Антрацит уль',
+  golden_oak: '  Белый/Золотой дуб',
+  dark_oak: '  Белый/Темн. дуб',
+  mahogany: '  Белый/Африк. вишня',
+  silver: '  Белый/Квар. серый',
+};
+const profectaPlusProductionWindowColorLabels: Partial<Record<WindowColor, string>> = {
+  mahogany: '  Белый/Африк. вишня',
+};
+const laminateProfileIds = new Set<ProfileId>(['grunder-60', 'wintech-70', 'profecta-plus']);
+const productionDripColorLabels: Record<DripColor, string> = {
+  white: 'Белый',
+  brown: 'КОРИЧНЕВЫЙ',
+  gray: 'Серый ',
+};
+const productionDripArticleLabels: Record<number, string> = {
+  180: 'ОТЛ. 180 (ш-0,23)',
+};
+const productionSillTypeArticleLabels: Record<SillType, string> = {
+  fineber: 'FineBer',
+  komfort: 'KOMFORT',
+};
 
 const additionalOptionTypeLabels: Record<AdditionalOptionType, string> = {
   sill: 'Подоконник',
@@ -265,15 +377,141 @@ const additionalOptionTypeLabels: Record<AdditionalOptionType, string> = {
 
 const defaultDrainage: DrainageType = 'bottom';
 const defaultSealColor: SealColor = 'black';
-const defaultWindowColorSide: WindowColorSide = 'solid';
+const defaultWindowColorSide: WindowColorSide = 'outside';
 const defaultWindowColor: WindowColor = 'white';
 const defaultHandleType: HandleType = 'standard';
 const defaultHandleColor: HandleColor = 'white';
 const defaultMullionOrientation: MullionOrientation = 'vertical';
 
+const productionTypeIds: Record<OpeningType, number> = {
+  single: 344,
+  single_turn: 345,
+  double: 351,
+  double_left_active: 347,
+  double_right_active: 346,
+  double_dual_active: 352,
+  triple: 348,
+  triple_dual_active: 353,
+  triple_full_active: 348,
+  balcony: 349,
+  balcony_left_door: 350,
+  balcony_right_door: 350,
+};
+
+const productionContourCounts: Record<OpeningType, CalculatorProductionQuery['contours'][number]['id']> = {
+  single: 1,
+  single_turn: 2,
+  double: 1,
+  double_left_active: 2,
+  double_right_active: 2,
+  double_dual_active: 3,
+  triple: 2,
+  triple_dual_active: 3,
+  triple_full_active: 3,
+  balcony: 2,
+  balcony_left_door: 2,
+  balcony_right_door: 2,
+};
+
+const productionSystemIds: Record<ProfileId, string> = {
+  'rula-58': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/ RULA 58 мм',
+  'isotech-58': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/ISOTECH 58',
+  'grunder-60': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 58 мм-60 мм/GRUNDER 60',
+  'wintech-70': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 70 мм-80 мм/ WINTECH 70 КЛАСС А',
+  'exprof-arctica': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 70 мм-80 мм/EXPROF ARCTICA',
+  'profecta-plus': '/_СИСТЕМЫ/1 ОКОННЫЕ СИСТЕМЫ/СИСТЕМЫ 70 мм-80 мм/PROFECTA PLUS',
+};
+
+const MAX_DEALER_DISCOUNT_PERCENT = 46;
+const MOSQUITO_SCREEN_ARTICLE = 'МС';
+const MOSQUITO_SCREEN_COLOR = 'Без цвета';
+
+const clampDealerDiscountPercent = (value: number): number =>
+  Math.max(0, Math.min(MAX_DEALER_DISCOUNT_PERCENT, Math.trunc(Number.isFinite(value) ? value : 0)));
+
+const calculateCustomerPrice = (serverPrice: number, discountPercent: number): number =>
+  Math.max(0, Math.round(serverPrice * (1 - clampDealerDiscountPercent(discountPercent) / 100)));
+
+const calculateDealerProfitAmount = (serverPrice: number, discountPercent: number): number =>
+  Math.max(0, Math.round(serverPrice * ((MAX_DEALER_DISCOUNT_PERCENT - clampDealerDiscountPercent(discountPercent)) / 100)));
+
+const buildDealerProfitCode = (profitAmount: number): string => `PRFT-${Math.max(0, Math.round(profitAmount))}`;
+
+const productionDrainageLabels: Record<DrainageType, string> = {
+  bottom: 'СНИЗУ',
+  none: 'НЕТ',
+  street: 'СО СТОРОНЫ УЛИЦЫ',
+};
+
+const getProductionAccessoryArticle = (option: CalculatorAdditionalOption): string => {
+  const depth = option.type === 'drip' ? SUPPORTED_DRIP_DEPTH : option.width ?? 300;
+
+  if (option.type === 'sill') {
+    return `Под ${depth} ${productionSillTypeArticleLabels.fineber}`;
+  }
+
+  return productionDripArticleLabels[SUPPORTED_DRIP_DEPTH];
+};
+
+const normalizeSupportedAdditionalOptions = (
+  options: CalculatorAdditionalOption[] | undefined,
+): CalculatorAdditionalOption[] =>
+  (options ?? []).map((option) =>
+    option.type === 'drip' && option.width !== SUPPORTED_DRIP_DEPTH
+      ? { ...option, width: SUPPORTED_DRIP_DEPTH }
+      : option,
+  );
+
+const productionActiveContourOverrides: Partial<
+  Record<OpeningType, Array<CalculatorProductionQuery['contours'][number]['id']>>
+> = {
+  triple_dual_active: [2],
+};
+
+const buildProductionHandleContour = (
+  id: CalculatorProductionQuery['contours'][number]['id'],
+  handleColor: HandleColor,
+): CalculatorProductionQuery['contours'][number] => ({
+  id,
+  parameters: [
+    {
+      'ТИП РУЧКИ': '  ОКОННАЯ',
+    },
+    {
+      'ВИД РУЧКИ': 'ACCADO',
+    },
+    {
+      'ЦВЕТ РУЧКИ ACCADO': productionHandleColorLabels[handleColor],
+    },
+  ],
+});
+
+const buildProductionContours = (
+  openingType: OpeningType,
+  handleColor: HandleColor,
+): CalculatorProductionQuery['contours'] => {
+  const activeContourIds = productionActiveContourOverrides[openingType];
+
+  if (activeContourIds) {
+    return activeContourIds.map((id) => buildProductionHandleContour(id, handleColor));
+  }
+
+  return Array.from({ length: productionContourCounts[openingType] }, (_, index) => {
+    const id = (index + 1) as CalculatorProductionQuery['contours'][number]['id'];
+
+    if (id === 1) {
+      return null;
+    }
+
+    return buildProductionHandleContour(id, handleColor);
+  }).filter((contour): contour is CalculatorProductionQuery['contours'][number] => contour !== null);
+};
+
 const MULLION_STEP = 10;
 const MULLION_MIN_SECTION_FALLBACK = 80;
 const MULLION_MIN_SECTION_TARGET = 250;
+const TWO_SASH_ACTIVE_SECTION_MIN = 450;
+const DOUBLE_LEFT_ACTIVE_SECTION_MIN = 350;
 
 const openingTypeMullionCount: Record<OpeningType, 0 | 1 | 2> = {
   single: 0,
@@ -288,6 +526,72 @@ const openingTypeMullionCount: Record<OpeningType, 0 | 1 | 2> = {
   balcony: 1,
   balcony_left_door: 1,
   balcony_right_door: 1,
+};
+
+interface SashLayoutItem {
+  id: SashId;
+  label: string;
+  left: number;
+  width: number;
+}
+
+const singleSashLayout: SashLayoutItem[] = [{ id: 'single', label: 'Створка', left: 12, width: 76 }];
+const doubleSashLayout: SashLayoutItem[] = [
+  { id: 'left', label: 'Левая', left: 9, width: 39 },
+  { id: 'right', label: 'Правая', left: 52, width: 39 },
+];
+const tripleSashLayout: SashLayoutItem[] = [
+  { id: 'left', label: 'Левая', left: 7, width: 27 },
+  { id: 'center', label: 'Центр', left: 36.5, width: 27 },
+  { id: 'right', label: 'Правая', left: 66, width: 27 },
+];
+
+const activeSashIdsByOpeningType: Record<OpeningType, readonly SashId[]> = {
+  single: [],
+  single_turn: ['single'],
+  double: [],
+  double_left_active: ['left'],
+  double_right_active: ['right'],
+  double_dual_active: ['left', 'right'],
+  triple: ['center'],
+  triple_dual_active: ['left', 'right'],
+  triple_full_active: ['left', 'center', 'right'],
+  balcony: ['left', 'right'],
+  balcony_left_door: ['left'],
+  balcony_right_door: ['right'],
+};
+
+const getSashLayout = (openingType: OpeningType): SashLayoutItem[] => {
+  if (openingType.startsWith('triple')) {
+    return tripleSashLayout;
+  }
+
+  if (openingType.startsWith('double') || openingType.startsWith('balcony')) {
+    return doubleSashLayout;
+  }
+
+  return singleSashLayout;
+};
+
+const getActiveSashLayout = (openingType: OpeningType): SashLayoutItem[] => {
+  const activeSashIds = new Set(activeSashIdsByOpeningType[openingType]);
+
+  return getSashLayout(openingType).filter((sash) => activeSashIds.has(sash.id));
+};
+
+const openingTypeHasActiveSashes = (openingType: OpeningType): boolean =>
+  activeSashIdsByOpeningType[openingType].length > 0;
+
+const normalizeSashesForOpening = (
+  openingType: OpeningType,
+  sourceSashes: CalculatorSashConfig[] | undefined,
+): CalculatorSashConfig[] => {
+  const sourceById = new Map((sourceSashes ?? []).map((sash) => [sash.id, sash]));
+
+  return getActiveSashLayout(openingType).map((layoutItem) => ({
+    id: layoutItem.id,
+    mosquitoScreenEnabled: sourceById.get(layoutItem.id)?.mosquitoScreenEnabled === true,
+  }));
 };
 
 const isMullionOrientation = (value: string | undefined): value is MullionOrientation =>
@@ -317,6 +621,33 @@ const getMullionMinSectionSize = (axisSize: number, mullionCount: number): numbe
   return Math.max(MULLION_MIN_SECTION_FALLBACK, Math.min(MULLION_MIN_SECTION_TARGET, maxAvailablePerSection));
 };
 
+const getMullionSectionMinSizes = (
+  openingType: OpeningType | undefined,
+  mullionCount: number,
+  axisSize: number,
+): number[] => {
+  const fallbackSize = getMullionMinSectionSize(axisSize, mullionCount);
+  const sizes = Array.from({ length: mullionCount + 1 }, () => fallbackSize);
+
+  if (mullionCount !== 1) {
+    return sizes;
+  }
+
+  if (openingType === 'double_left_active') {
+    sizes[0] = DOUBLE_LEFT_ACTIVE_SECTION_MIN;
+  }
+
+  if (
+    openingType === 'double' ||
+    openingType === 'double_right_active' ||
+    openingType === 'double_dual_active'
+  ) {
+    sizes[1] = TWO_SASH_ACTIVE_SECTION_MIN;
+  }
+
+  return sizes;
+};
+
 const createDefaultMullionOffsets = (mullionCount: number, axisSize: number): MullionOffsets => {
   if (mullionCount <= 0 || axisSize <= 0) {
     return {};
@@ -336,12 +667,13 @@ const sanitizeMullionOffsets = (
   rawOffsets: MullionOffsets | undefined,
   mullionCount: number,
   axisSize: number,
+  openingType?: OpeningType,
 ): MullionOffsets => {
   if (mullionCount <= 0 || axisSize <= 0) {
     return {};
   }
 
-  const minSectionSize = getMullionMinSectionSize(axisSize, mullionCount);
+  const minSectionSizes = getMullionSectionMinSizes(openingType, mullionCount, axisSize);
   const defaults = createDefaultMullionOffsets(mullionCount, axisSize);
   const values: number[] = [];
 
@@ -356,14 +688,14 @@ const sanitizeMullionOffsets = (
 
   let previous = 0;
   for (let index = 0; index < values.length; index += 1) {
-    const minOffset = previous + minSectionSize;
+    const minOffset = previous + minSectionSizes[index];
     values[index] = Math.max(values[index], minOffset);
     previous = values[index];
   }
 
   let next = axisSize;
   for (let index = values.length - 1; index >= 0; index -= 1) {
-    const maxOffset = next - minSectionSize;
+    const maxOffset = next - minSectionSizes[index + 1];
     values[index] = Math.min(values[index], maxOffset);
     next = values[index];
   }
@@ -404,12 +736,13 @@ const getMullionBounds = (
   offsets: MullionOffsets,
   mullionCount: number,
   axisSize: number,
+  openingType?: OpeningType,
 ): { min: number; max: number } => {
-  const minSectionSize = getMullionMinSectionSize(axisSize, mullionCount);
+  const minSectionSizes = getMullionSectionMinSizes(openingType, mullionCount, axisSize);
   const previousOffset = index > 1 ? offsets[String(index - 1)] ?? 0 : 0;
   const nextOffset = index < mullionCount ? offsets[String(index + 1)] ?? axisSize : axisSize;
-  const min = previousOffset + minSectionSize;
-  const max = nextOffset - minSectionSize;
+  const min = previousOffset + minSectionSizes[index - 1];
+  const max = nextOffset - minSectionSizes[index];
 
   if (min > max) {
     const midpoint = roundToMullionStep((min + max) / 2);
@@ -423,15 +756,33 @@ const DIMENSION_MIN = 500;
 const DIMENSION_MAX = 3200;
 const clampDimension = (value: number): number => Math.max(DIMENSION_MIN, Math.min(DIMENSION_MAX, value));
 const clampOptionLength = (value: number): number => Math.max(300, Math.min(6000, value));
-const clampOptionWidth = (value: number): number => Math.max(50, Math.min(1000, value));
+const clampSillLength = (value: number): number => Math.max(1, Math.min(6000, value));
 
 const normalizePositionId = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.trunc(value)) : null;
 const isProfileId = (value: string | undefined): value is ProfileId => profileCatalog.some((item) => item.id === value);
 const isOpeningType = (value: string | undefined): value is OpeningType =>
   openingTypeOptions.some((item) => item.id === value);
+const isSealColor = (value: string | undefined): value is SealColor =>
+  sealColorOptions.some((item) => item.id === value);
 const isWindowColor = (value: string | undefined): value is WindowColor =>
   windowColorOptions.some((item) => item.id === value);
+
+const isLaminateColorAvailable = (profileId: ProfileId, color: WindowColor): boolean =>
+  color === 'white' || laminateProfileIds.has(profileId);
+
+const normalizeWindowColorForProfile = (profileId: ProfileId, color: WindowColor): WindowColor =>
+  isLaminateColorAvailable(profileId, color) ? color : 'white';
+
+const getProductionWindowColor = (profileId: ProfileId, color: WindowColor): string => {
+  const normalizedColor = normalizeWindowColorForProfile(profileId, color);
+
+  if (profileId === 'profecta-plus') {
+    return profectaPlusProductionWindowColorLabels[normalizedColor] ?? productionWindowColorLabels[normalizedColor];
+  }
+
+  return productionWindowColorLabels[normalizedColor];
+};
 const isHandleType = (value: string | undefined): value is HandleType =>
   handleTypeOptions.some((item) => item.id === value);
 const isHandleColor = (value: string | undefined): value is HandleColor =>
@@ -439,12 +790,166 @@ const isHandleColor = (value: string | undefined): value is HandleColor =>
 const getOpeningTypeById = (openingType: OpeningType) =>
   openingTypeOptions.find((item) => item.id === openingType) ?? openingTypeOptions[2];
 
+const formatProductionMeters = (valueMm: number): string => {
+  const valueMeters = Math.max(0, valueMm) / 1000;
+  const roundedValue = Number(valueMeters.toFixed(3));
+
+  return String(roundedValue).replace('.', ',');
+};
+
+const getSashSectionWidths = (
+  openingType: OpeningType,
+  windowWidth: number,
+  mullionOffsets: MullionOffsets,
+  mullionOrientation: MullionOrientation,
+): Map<SashId, number> => {
+  const layout = getSashLayout(openingType);
+  const equalSectionWidth = Math.max(1, Math.round(windowWidth / Math.max(1, layout.length)));
+
+  if (layout.length <= 1 || mullionOrientation !== 'vertical') {
+    return new Map(layout.map((sash) => [sash.id, layout.length === 1 ? windowWidth : equalSectionWidth]));
+  }
+
+  const offsets = Object.values(mullionOffsets)
+    .filter((offset) => Number.isFinite(offset) && offset > 0 && offset < windowWidth)
+    .sort((a, b) => a - b)
+    .slice(0, layout.length - 1);
+
+  if (offsets.length !== layout.length - 1) {
+    return new Map(layout.map((sash) => [sash.id, equalSectionWidth]));
+  }
+
+  const boundaries = [0, ...offsets, windowWidth];
+
+  return new Map(
+    layout.map((sash, index) => [sash.id, Math.max(1, Math.round(boundaries[index + 1] - boundaries[index]))]),
+  );
+};
+
+const buildProductionMosquitoAccessories = (
+  draftState: DraftState,
+  mullionOffsets: MullionOffsets,
+  startId: number,
+): NonNullable<CalculatorProductionQuery['accessories']> => {
+  const selectedSashes = draftState.sashes.filter((sash) => sash.mosquitoScreenEnabled);
+
+  if (selectedSashes.length === 0) {
+    return [];
+  }
+
+  const sectionWidths = getSashSectionWidths(
+    draftState.openingType,
+    draftState.width,
+    mullionOffsets,
+    draftState.mullionOrientation,
+  );
+
+  return selectedSashes.map((sash, index) => ({
+    id: startId + index,
+    article: MOSQUITO_SCREEN_ARTICLE,
+    color: MOSQUITO_SCREEN_COLOR,
+    quantity: '1',
+    length: formatProductionMeters(draftState.height),
+    width: formatProductionMeters(sectionWidths.get(sash.id) ?? draftState.width),
+  }));
+};
+
+const buildProductionAccessories = (
+  options: CalculatorAdditionalOption[],
+  windowWidth: number,
+): CalculatorProductionQuery['accessories'] => {
+  if (options.length === 0) {
+    return undefined;
+  }
+
+  return normalizeSupportedAdditionalOptions(options).map((option) => {
+    const accessoryColor =
+      option.type === 'sill'
+        ? sillColorLabels[option.sillColor ?? 'white']
+        : productionDripColorLabels[option.dripColor ?? 'white'];
+
+    return {
+      id: option.id,
+      article: getProductionAccessoryArticle(option),
+      color: accessoryColor,
+      quantity: '1',
+      length: formatProductionMeters(option.type === 'drip' ? windowWidth : option.length ?? 0),
+      width: formatProductionMeters(option.type === 'drip' ? SUPPORTED_DRIP_DEPTH : option.width ?? 0),
+    };
+  });
+};
+
+const buildProductionQuery = (
+  draftState: DraftState,
+  mullionOffsets: MullionOffsets,
+): CalculatorProductionQuery => {
+  const sortedMullionOffsets = Object.entries(mullionOffsets)
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([index, offset]) => ({ [index]: offset }));
+  const optionAccessories = buildProductionAccessories(draftState.additionalOptions, draftState.width) ?? [];
+  const nextAccessoryId = Math.max(0, ...optionAccessories.map((accessory) => accessory.id)) + 1;
+  const mosquitoAccessories = buildProductionMosquitoAccessories(draftState, mullionOffsets, nextAccessoryId);
+  const accessories = [...optionAccessories, ...mosquitoAccessories];
+  const discount = clampDealerDiscountPercent(draftState.dealerDiscountPercent);
+
+  return {
+    type_id: productionTypeIds[draftState.openingType],
+    width: draftState.width,
+    height: draftState.height,
+    system_id: productionSystemIds[draftState.profileId],
+    color: getProductionWindowColor(draftState.profileId, draftState.windowColor),
+    discount: String(discount),
+    mullionOffset: sortedMullionOffsets,
+    parameters: {
+      sealColor: sealColorLabels[draftState.sealColor],
+      drainage: productionDrainageLabels[draftState.drainage],
+    },
+    contours: buildProductionContours(draftState.openingType, draftState.handleColor),
+    ...(accessories.length > 0 ? { accessories } : {}),
+  };
+};
+
+const getProductionQueryForRequest = (
+  productionQuery: CalculatorProductionQuery,
+  includeDiscount: boolean,
+): CalculatorProductionQuery => {
+  if (includeDiscount || !productionQuery.discount) {
+    return productionQuery;
+  }
+
+  const { discount: _discount, ...queryWithoutDiscount } = productionQuery;
+  return queryWithoutDiscount;
+};
+
+const buildProductionRequestPayload = (
+  productionQuery: CalculatorProductionQuery,
+  options?: { includeDiscount?: boolean },
+) => {
+  const requestQuery = getProductionQueryForRequest(productionQuery, options?.includeDiscount !== false);
+
+  return {
+    query: requestQuery,
+    productionQuery: requestQuery,
+    type_id: requestQuery.type_id,
+    width: requestQuery.width,
+    height: requestQuery.height,
+    system_id: requestQuery.system_id,
+    color: requestQuery.color,
+    ...(requestQuery.discount ? { discount: requestQuery.discount } : {}),
+    mullionOffset: requestQuery.mullionOffset,
+    parameters: requestQuery.parameters,
+    contours: requestQuery.contours,
+    ...(requestQuery.accessories ? { accessories: requestQuery.accessories } : {}),
+  };
+};
+
 const createDefaultDraft = (): DraftState => ({
   width: 1300,
   height: 1400,
   packageType: 'standard',
-  openingType: 'double',
+  openingType: 'single',
   profileId: 'grunder-60',
+  dealerDiscountPercent: 0,
   drainage: defaultDrainage,
   sealColor: defaultSealColor,
   windowColorSide: defaultWindowColorSide,
@@ -454,13 +959,16 @@ const createDefaultDraft = (): DraftState => ({
   mullionOrientation: defaultMullionOrientation,
   mullionOffsets: {},
   additionalOptions: [],
+  sashes: normalizeSashesForOpening('single', []),
 });
 
-const createDefaultOptionForm = (): OptionFormState => ({
+const createDefaultOptionForm = (windowWidth = 1300): OptionFormState => ({
   type: 'sill',
-  length: 1300,
+  length: clampOptionLength(windowWidth),
   width: 300,
+  sillType: 'fineber',
   sillColor: 'white',
+  dripColor: 'white',
 });
 
 const createDraftFromPosition = (position?: CalculatorPosition): DraftState => {
@@ -470,29 +978,35 @@ const createDraftFromPosition = (position?: CalculatorPosition): DraftState => {
     return defaults;
   }
 
+  const openingType = isOpeningType(position.openingType) ? position.openingType : defaults.openingType;
+  const profileId = isProfileId(position.profileId) ? position.profileId : defaults.profileId;
+  const windowColor = isWindowColor(position.windowColor) ? position.windowColor : defaults.windowColor;
+
   return {
     width: clampDimension(position.width ?? defaults.width),
     height: clampDimension(position.height ?? defaults.height),
     packageType: position.packageType ?? defaults.packageType,
-    openingType: isOpeningType(position.openingType) ? position.openingType : defaults.openingType,
-    profileId: isProfileId(position.profileId) ? position.profileId : defaults.profileId,
+    openingType,
+    profileId,
+    dealerDiscountPercent: clampDealerDiscountPercent(position.dealerDiscountPercent ?? defaults.dealerDiscountPercent),
     drainage: position.drainage ?? defaults.drainage,
-    sealColor: position.sealColor ?? defaults.sealColor,
-    windowColorSide: position.windowColorSide === 'solid' ? 'solid' : defaults.windowColorSide,
-    windowColor: isWindowColor(position.windowColor) ? position.windowColor : defaults.windowColor,
+    sealColor: isSealColor(position.sealColor) ? position.sealColor : defaults.sealColor,
+    windowColorSide: defaults.windowColorSide,
+    windowColor: normalizeWindowColorForProfile(profileId, windowColor),
     handleType: isHandleType(position.handleType) ? position.handleType : defaults.handleType,
     handleColor: isHandleColor(position.handleColor) ? position.handleColor : defaults.handleColor,
     mullionOrientation: isMullionOrientation(position.mullionOrientation)
       ? position.mullionOrientation
       : defaults.mullionOrientation,
     mullionOffsets: isMullionOffsets(position.mullionOffsets) ? position.mullionOffsets : defaults.mullionOffsets,
-    additionalOptions: position.additionalOptions ?? [],
+    additionalOptions: normalizeSupportedAdditionalOptions(position.additionalOptions),
+    sashes: normalizeSashesForOpening(openingType, position.sashes),
   };
 };
 
-const getOptionPrice = (option: CalculatorAdditionalOption): number => {
-  const length = option.length ?? 0;
-  const width = option.width ?? 0;
+const getOptionPrice = (option: CalculatorAdditionalOption, windowWidth = option.length ?? 0): number => {
+  const length = option.type === 'drip' ? windowWidth : option.length ?? 0;
+  const width = option.width ?? (option.type === 'drip' ? 180 : 0);
   const area = (length * width) / 1_000_000;
 
   if (option.type === 'sill') {
@@ -525,7 +1039,29 @@ export const CalculatorPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as CalculatorLocationState | null;
-  const returnTo = typeof state?.returnTo === 'string' && state.returnTo.length > 0 ? state.returnTo : '/orders/new';
+  const sourceQuery = new URLSearchParams(location.search);
+  const queriedSourceLeadVersion = Number(sourceQuery.get('sourceLeadVersion'));
+  const sourceLeadId =
+    typeof state?.sourceLeadId === 'string' && state.sourceLeadId.trim()
+      ? state.sourceLeadId.trim()
+      : sourceQuery.get('sourceLeadId')?.trim() || undefined;
+  const sourceLeadVersion =
+    typeof state?.sourceLeadVersion === 'number' && Number.isFinite(state.sourceLeadVersion)
+      ? state.sourceLeadVersion
+      : Number.isFinite(queriedSourceLeadVersion) && queriedSourceLeadVersion > 0
+        ? queriedSourceLeadVersion
+        : undefined;
+  const fallbackReturnParams = sourceLeadId
+    ? new URLSearchParams({
+        sourceLeadId,
+        ...(sourceLeadVersion ? { sourceLeadVersion: String(sourceLeadVersion) } : {}),
+      })
+    : null;
+  const returnTo =
+    typeof state?.returnTo === 'string' && state.returnTo.length > 0
+      ? state.returnTo
+      : `/orders/new${fallbackReturnParams ? `?${fallbackReturnParams.toString()}` : ''}`;
+  const isReadOnly = state?.readOnly === true;
   const linkedOrderId = extractOrderIdFromReturnPath(returnTo);
   const requestedPositionId = normalizePositionId(state?.positionId);
   const [positions, setPositions] = useState<CalculatorPosition[]>([]);
@@ -544,13 +1080,21 @@ export const CalculatorPage = () => {
   const [optionForm, setOptionForm] = useState<OptionFormState>(() => createDefaultOptionForm());
   const [mullionControlMode] = useState<MullionControlMode>('drag');
   const [activeMullionId, setActiveMullionId] = useState<number | null>(null);
+  const [remotePrice, setRemotePrice] = useState<number | null>(null);
+  const [remotePriceStatus, setRemotePriceStatus] = useState<RemotePriceStatus>('idle');
+  const [remotePriceError, setRemotePriceError] = useState<string | null>(null);
+  const [isSaving, setSaving] = useState(false);
   const mullionPreviewRef = useRef<HTMLDivElement | null>(null);
   const mullionDragStateRef = useRef<{ pointerId: number; index: number } | null>(null);
+  const priceRequestSequenceRef = useRef(0);
 
   const buildReturnState = (nextPositions?: CalculatorPosition[]) => ({
-    calculatorPositions: nextPositions,
+    ...(!isReadOnly ? { calculatorPositions: nextPositions } : {}),
     draftForm: state?.draftForm,
     draftServices: state?.draftServices,
+    draftWindowDiscount: state?.draftWindowDiscount,
+    sourceLeadId,
+    sourceLeadVersion,
   });
 
   useEffect(() => {
@@ -577,7 +1121,7 @@ export const CalculatorPage = () => {
     setDraft((value) => {
       const nextMullionCount = getMullionCountByOpeningType(value.openingType);
       const nextAxisSize = getMullionAxisSize(value.width, value.height, value.mullionOrientation);
-      const nextOffsets = sanitizeMullionOffsets(value.mullionOffsets, nextMullionCount, nextAxisSize);
+      const nextOffsets = sanitizeMullionOffsets(value.mullionOffsets, nextMullionCount, nextAxisSize, value.openingType);
 
       if (areMullionOffsetsEqual(value.mullionOffsets, nextOffsets)) {
         return value;
@@ -590,16 +1134,24 @@ export const CalculatorPage = () => {
     });
   }, [draft.height, draft.mullionOrientation, draft.openingType, draft.width]);
 
-  const currentProfile = profileCatalog.find((item) => item.id === draft.profileId) ?? profileCatalog[2];
-  const currentPackage = packageOptions.find((item) => item.id === draft.packageType) ?? packageOptions[1];
   const currentOpening = getOpeningTypeById(draft.openingType);
   const currentHandleColor = handleColorOptions.find((item) => item.id === draft.handleColor) ?? handleColorOptions[0];
+  const sashLayout = useMemo(() => getActiveSashLayout(draft.openingType), [draft.openingType]);
+  const hasActiveSashes = sashLayout.length > 0;
+  const availableWindowColorOptions = useMemo(
+    () => windowColorOptions.filter((item) => isLaminateColorAvailable(draft.profileId, item.id)),
+    [draft.profileId],
+  );
+  const selectedMosquitoScreens = useMemo(
+    () => draft.sashes.filter((sash) => sash.mosquitoScreenEnabled).map((sash) => sash.id),
+    [draft.sashes],
+  );
   const mullionCount = getMullionCountByOpeningType(draft.openingType);
   const mullionAxisSize = getMullionAxisSize(draft.width, draft.height, draft.mullionOrientation);
 
   const normalizedMullionOffsets = useMemo(
-    () => sanitizeMullionOffsets(draft.mullionOffsets, mullionCount, mullionAxisSize),
-    [draft.mullionOffsets, mullionAxisSize, mullionCount],
+    () => sanitizeMullionOffsets(draft.mullionOffsets, mullionCount, mullionAxisSize, draft.openingType),
+    [draft.mullionOffsets, draft.openingType, mullionAxisSize, mullionCount],
   );
 
   const mullionSegments = useMemo(() => {
@@ -631,10 +1183,14 @@ export const CalculatorPage = () => {
     const packageOption = packageOptions.find((item) => item.id === draftState.packageType) ?? packageOptions[1];
     const sealExtra = sealColorOptions.find((item) => item.id === draftState.sealColor)?.extra ?? 0;
     const drainageExtra = drainageOptions.find((item) => item.id === draftState.drainage)?.extra ?? 0;
-    const windowColorExtra = windowColorOptions.find((item) => item.id === draftState.windowColor)?.extra ?? 0;
+    const effectiveWindowColor = normalizeWindowColorForProfile(draftState.profileId, draftState.windowColor);
+    const windowColorExtra = windowColorOptions.find((item) => item.id === effectiveWindowColor)?.extra ?? 0;
     const handleTypeExtra = handleTypeOptions.find((item) => item.id === draftState.handleType)?.extra ?? 0;
     const handleColorExtra = handleColorOptions.find((item) => item.id === draftState.handleColor)?.extra ?? 0;
-    const optionPrice = draftState.additionalOptions.reduce((total, option) => total + getOptionPrice(option), 0);
+    const optionPrice = draftState.additionalOptions.reduce(
+      (total, option) => total + getOptionPrice(option, draftState.width),
+      0,
+    );
 
     return Math.round(
       (area * profile.pricePerSquare * opening.factor +
@@ -648,10 +1204,76 @@ export const CalculatorPage = () => {
     );
   };
 
-  const totalPrice = useMemo(() => calculateDraftPrice(draft), [draft]);
+  const currentProductionQuery = useMemo(
+    () => buildProductionQuery(draft, normalizedMullionOffsets),
+    [draft, normalizedMullionOffsets],
+  );
+  const displayPrice = remotePrice ?? (remotePriceStatus === 'error' ? calculateDraftPrice(draft) : null);
+  const customerPrice = displayPrice === null ? null : calculateCustomerPrice(displayPrice, draft.dealerDiscountPercent);
+  const dealerProfitAmount = displayPrice === null ? 0 : calculateDealerProfitAmount(displayPrice, draft.dealerDiscountPercent);
+  const dealerProfitCode = buildDealerProfitCode(dealerProfitAmount);
+  const totalPriceLabel =
+    customerPrice === null ? '—' : formatCurrency(customerPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const serverPriceLabel =
+    displayPrice === null ? '—' : formatCurrency(displayPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  useEffect(() => {
+    const requestId = priceRequestSequenceRef.current + 1;
+    priceRequestSequenceRef.current = requestId;
+    let isActive = true;
+
+    setRemotePrice(null);
+    setRemotePriceStatus('loading');
+    setRemotePriceError(null);
+
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const priceResponse = await postLocalAjaxJson<unknown>({
+            label: 'product_price',
+            path: LOCAL_AJAX_PATHS.getProductPrice,
+            payload: {
+              source: 'calculator',
+              action: 'product_price',
+              positionId,
+              ...buildProductionRequestPayload(currentProductionQuery),
+            },
+          });
+
+          if (!isActive || priceRequestSequenceRef.current !== requestId) {
+            return;
+          }
+
+          const nextRemotePrice = extractRemotePrice(priceResponse);
+
+          if (nextRemotePrice === null) {
+            throw new Error('В ответе InviteCraft нет цены');
+          }
+
+          setRemotePrice(nextRemotePrice);
+          setRemotePriceStatus('success');
+          setRemotePriceError(null);
+        } catch (error: unknown) {
+          if (!isActive || priceRequestSequenceRef.current !== requestId) {
+            return;
+          }
+
+          setRemotePrice(null);
+          setRemotePriceStatus('error');
+          setRemotePriceError(getRemotePriceErrorMessage(error));
+        }
+      })();
+    }, 450);
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [currentProductionQuery, positionId]);
+
   const openAddOptionDialog = (): void => {
     setEditingOptionId(null);
-    setOptionForm(createDefaultOptionForm());
+    setOptionForm(createDefaultOptionForm(draft.width));
     setOptionDialogOpen(true);
   };
 
@@ -659,9 +1281,11 @@ export const CalculatorPage = () => {
     setEditingOptionId(option.id);
     setOptionForm({
       type: option.type,
-      length: option.length ?? 1300,
-      width: option.width ?? (option.type === 'sill' ? 300 : 150),
-      sillColor: option.sillColor ?? 'white',
+      length: option.length ?? draft.width,
+      width: option.width ?? (option.type === 'drip' ? 180 : 300),
+      sillType: 'fineber',
+      sillColor: 'white',
+      dripColor: option.dripColor ?? 'white',
     });
     setOptionDialogOpen(true);
   };
@@ -672,9 +1296,11 @@ export const CalculatorPage = () => {
         editingOptionId ??
         (draft.additionalOptions.length > 0 ? Math.max(...draft.additionalOptions.map((item) => item.id)) + 1 : 1),
       type: optionForm.type,
-      length: clampOptionLength(optionForm.length),
-      width: clampOptionWidth(optionForm.width),
-      sillColor: optionForm.type === 'sill' ? optionForm.sillColor : undefined,
+      length: optionForm.type === 'sill' ? clampSillLength(optionForm.length || draft.width) : clampOptionLength(draft.width),
+      width: optionForm.width,
+      sillType: optionForm.type === 'sill' ? 'fineber' : undefined,
+      sillColor: optionForm.type === 'sill' ? 'white' : undefined,
+      dripColor: optionForm.type === 'drip' ? optionForm.dripColor : undefined,
     };
 
     setDraft((value) => ({
@@ -775,6 +1401,26 @@ export const CalculatorPage = () => {
     applyDimensionValue(field, clampDimension(baseValue + delta));
   };
 
+  const setDealerDiscountPercent = (nextValue: number): void => {
+    setDraft((value) => ({
+      ...value,
+      dealerDiscountPercent: clampDealerDiscountPercent(nextValue),
+    }));
+  };
+
+  const adjustDealerDiscountPercent = (delta: number): void => {
+    setDealerDiscountPercent(draft.dealerDiscountPercent + delta);
+  };
+
+  const toggleMosquitoScreen = (sashId: SashId): void => {
+    setDraft((value) => ({
+      ...value,
+      sashes: normalizeSashesForOpening(value.openingType, value.sashes).map((sash) =>
+        sash.id === sashId ? { ...sash, mosquitoScreenEnabled: !sash.mosquitoScreenEnabled } : sash,
+      ),
+    }));
+  };
+
   const setMullionOffset = (mullionIndex: number, nextOffset: number): void => {
     if (!Number.isFinite(nextOffset)) {
       return;
@@ -783,8 +1429,8 @@ export const CalculatorPage = () => {
     setDraft((value) => {
       const nextMullionCount = getMullionCountByOpeningType(value.openingType);
       const nextAxisSize = getMullionAxisSize(value.width, value.height, value.mullionOrientation);
-      const offsets = sanitizeMullionOffsets(value.mullionOffsets, nextMullionCount, nextAxisSize);
-      const bounds = getMullionBounds(mullionIndex, offsets, nextMullionCount, nextAxisSize);
+      const offsets = sanitizeMullionOffsets(value.mullionOffsets, nextMullionCount, nextAxisSize, value.openingType);
+      const bounds = getMullionBounds(mullionIndex, offsets, nextMullionCount, nextAxisSize, value.openingType);
       const normalizedOffset = roundToMullionStep(Math.max(bounds.min, Math.min(bounds.max, nextOffset)));
       const nextOffsets = sanitizeMullionOffsets(
         {
@@ -793,6 +1439,7 @@ export const CalculatorPage = () => {
         },
         nextMullionCount,
         nextAxisSize,
+        value.openingType,
       );
 
       if (areMullionOffsetsEqual(value.mullionOffsets, nextOffsets)) {
@@ -899,6 +1546,10 @@ export const CalculatorPage = () => {
   };
 
   const save = async (): Promise<void> => {
+    if (isSaving) {
+      return;
+    }
+
     const widthValidation = validateDimensionInput(dimensionInput.width);
     const heightValidation = validateDimensionInput(dimensionInput.height);
 
@@ -915,18 +1566,43 @@ export const CalculatorPage = () => {
       ...draft,
       width: widthValidation.value,
       height: heightValidation.value,
+      dealerDiscountPercent: clampDealerDiscountPercent(draft.dealerDiscountPercent),
+      additionalOptions: normalizeSupportedAdditionalOptions(draft.additionalOptions),
+      sashes: normalizeSashesForOpening(draft.openingType, draft.sashes),
     };
     const nextMullionCount = getMullionCountByOpeningType(nextDraft.openingType);
     const nextMullionAxisSize = getMullionAxisSize(nextDraft.width, nextDraft.height, nextDraft.mullionOrientation);
-    const nextMullionOffsets = sanitizeMullionOffsets(nextDraft.mullionOffsets, nextMullionCount, nextMullionAxisSize);
-    const nextPrice = calculateDraftPrice(nextDraft);
+    const nextMullionOffsets = sanitizeMullionOffsets(
+      nextDraft.mullionOffsets,
+      nextMullionCount,
+      nextMullionAxisSize,
+      nextDraft.openingType,
+    );
+    const productionQuery = buildProductionQuery(nextDraft, nextMullionOffsets);
+
+    setSaving(true);
+    setRemotePriceStatus('loading');
+    setRemotePriceError(null);
+
+    try {
+      const nextServerPrice = remotePrice ?? calculateDraftPrice(nextDraft);
+      const nextCustomerPrice = calculateCustomerPrice(nextServerPrice, nextDraft.dealerDiscountPercent);
+      const nextDealerProfitAmount = calculateDealerProfitAmount(nextServerPrice, nextDraft.dealerDiscountPercent);
+      const nextDealerProfitCode = buildDealerProfitCode(nextDealerProfitAmount);
+      const nextHasActiveSashes = openingTypeHasActiveSashes(nextDraft.openingType);
+      const nextMosquitoScreens = nextDraft.sashes.filter((sash) => sash.mosquitoScreenEnabled).map((sash) => sash.id);
     const existingPosition = positions.find((item) => item.id === positionId);
     const nextPosition: CalculatorPosition = {
       ...(existingPosition ?? { id: positionId }),
       id: positionId,
       width: nextDraft.width,
       height: nextDraft.height,
-      price: nextPrice,
+      price: nextCustomerPrice,
+      serverPrice: nextServerPrice,
+      customerPrice: nextCustomerPrice,
+      dealerDiscountPercent: nextDraft.dealerDiscountPercent,
+      dealerProfitAmount: nextDealerProfitAmount,
+      dealerProfitCode: nextDealerProfitCode,
       packageType: nextDraft.packageType,
       openingType: nextDraft.openingType,
       profileId: nextDraft.profileId,
@@ -934,11 +1610,13 @@ export const CalculatorPage = () => {
       sealColor: nextDraft.sealColor,
       windowColorSide: nextDraft.windowColorSide,
       windowColor: nextDraft.windowColor,
-      handleType: nextDraft.handleType,
-      handleColor: nextDraft.handleColor,
+      handleType: nextHasActiveSashes ? nextDraft.handleType : undefined,
+      handleColor: nextHasActiveSashes ? nextDraft.handleColor : undefined,
       mullionOrientation: nextDraft.mullionOrientation,
       mullionOffsets: nextMullionOffsets,
       additionalOptions: nextDraft.additionalOptions,
+      sashes: nextDraft.sashes,
+      productionQuery,
     };
     const nextPositions = [...positions.filter((item) => item.id !== positionId), nextPosition].sort((a, b) => a.id - b.id);
     const additionalOptionLabels = nextDraft.additionalOptions.map((option) => ({
@@ -946,9 +1624,13 @@ export const CalculatorPage = () => {
       type: option.type,
       typeLabel: additionalOptionTypeLabels[option.type],
       length: option.length ?? 0,
-      width: option.width ?? 0,
+      width: option.width ?? (option.type === 'drip' ? 180 : 0),
+      sillType: option.type === 'sill' ? 'fineber' : null,
+      sillTypeLabel: option.type === 'sill' ? sillTypeLabels.fineber : null,
       sillColor: option.sillColor ?? null,
       sillColorLabel: option.sillColor ? sillColorLabels[option.sillColor] : null,
+      dripColor: option.dripColor ?? null,
+      dripColorLabel: option.dripColor ? dripColorLabels[option.dripColor] : null,
     }));
     const mullionList = Object.entries(nextMullionOffsets)
       .sort((a, b) => Number(a[0]) - Number(b[0]))
@@ -965,28 +1647,43 @@ export const CalculatorPage = () => {
           rightLabel: `Правая часть: ${rightMm} мм`,
         };
       });
+    const mosquitoScreenLabels = nextMosquitoScreens.map((sashId) => {
+      const layoutItem = getSashLayout(nextDraft.openingType).find((item) => item.id === sashId);
+      return layoutItem ? `Москитная сетка: ${layoutItem.label}` : `Москитная сетка: ${sashId}`;
+    });
 
     const labels = {
       openingTypeLabel: openingTypeLabels[nextDraft.openingType],
       profileLabel: profileLabels[nextDraft.profileId],
       packageLabel: packageLabels[nextDraft.packageType],
+      serverPriceLabel: formatCurrency(nextServerPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      customerPriceLabel: formatCurrency(nextCustomerPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      dealerDiscountPercentLabel: `${nextDraft.dealerDiscountPercent}%`,
+      dealerProfitLabel: formatCurrency(nextDealerProfitAmount),
+      dealerProfitCode: nextDealerProfitCode,
       sealColorLabel: sealColorLabels[nextDraft.sealColor],
       drainageLabel: drainageLabels[nextDraft.drainage],
       windowColorSideLabel: windowColorSideLabels[nextDraft.windowColorSide],
       windowColorLabel: windowColorLabels[nextDraft.windowColor],
-      handleTypeLabel: handleTypeLabels[nextDraft.handleType],
-      handleColorLabel: handleColorLabels[nextDraft.handleColor],
+      handleTypeLabel: nextHasActiveSashes ? handleTypeLabels[nextDraft.handleType] : '',
+      handleColorLabel: nextHasActiveSashes ? handleColorLabels[nextDraft.handleColor] : '',
       mullionOrientationLabel: nextDraft.mullionOrientation === 'vertical' ? 'Вертикальные импосты' : 'Горизонтальные импосты',
       mullionOffsetsLabel: mullionList.length
         ? mullionList.map((item) => `Импост ${item.index}: ${item.leftMm} мм / ${item.rightMm} мм`)
         : [],
+      mosquitoScreensLabel: mosquitoScreenLabels,
       additionalOptions: additionalOptionLabels,
     };
     const values = {
       positionId,
       widthMm: nextDraft.width,
       heightMm: nextDraft.height,
-      totalPrice: nextPrice,
+      totalPrice: nextCustomerPrice,
+      serverPrice: nextServerPrice,
+      customerPrice: nextCustomerPrice,
+      dealerDiscountPercent: nextDraft.dealerDiscountPercent,
+      dealerProfitAmount: nextDealerProfitAmount,
+      dealerProfitCode: nextDealerProfitCode,
       openingType: nextDraft.openingType,
       profileId: nextDraft.profileId,
       packageType: nextDraft.packageType,
@@ -994,25 +1691,30 @@ export const CalculatorPage = () => {
       drainage: nextDraft.drainage,
       windowColorSide: nextDraft.windowColorSide,
       windowColor: nextDraft.windowColor,
-      handleType: nextDraft.handleType,
-      handleColor: nextDraft.handleColor,
+      handleType: nextHasActiveSashes ? nextDraft.handleType : null,
+      handleColor: nextHasActiveSashes ? nextDraft.handleColor : null,
       mullionOrientation: nextDraft.mullionOrientation,
       mullionOffsets: nextMullionOffsets,
       mullions: mullionList,
+      sashes: nextDraft.sashes,
+      mosquitoScreens: nextMosquitoScreens,
+      productionQuery,
+      query: productionQuery,
       additionalOptions: nextDraft.additionalOptions.map((option) => ({
         id: option.id,
         type: option.type,
         length: option.length ?? 0,
-        width: option.width ?? 0,
+        width: option.width ?? (option.type === 'drip' ? 180 : 0),
+        sillType: option.type === 'sill' ? 'fineber' : null,
         sillColor: option.sillColor ?? null,
+        dripColor: option.dripColor ?? null,
       })),
       rawDraft: nextDraft,
       rawPosition: nextPosition,
       rawPositions: nextPositions,
     };
 
-    writeCalculatorPositions(nextPositions);
-    await postLocalAjaxJson({
+    const addProductResponse = await postLocalAjaxJson<unknown>({
       label: 'product_add',
       path: LOCAL_AJAX_PATHS.addProduct,
       payload: {
@@ -1020,18 +1722,49 @@ export const CalculatorPage = () => {
         action: 'product_add',
         orderId: linkedOrderId,
         positionId,
+        ...buildProductionRequestPayload(productionQuery),
         dimensions: {
           widthMm: nextDraft.width,
           heightMm: nextDraft.height,
           label: `${nextDraft.width} x ${nextDraft.height} мм`,
         },
-        totalPrice: nextPrice,
-        totalPriceLabel: formatCurrency(nextPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        totalPrice: nextCustomerPrice,
+        totalPriceLabel: formatCurrency(nextCustomerPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        serverPrice: nextServerPrice,
+        serverPriceLabel: formatCurrency(nextServerPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        customerPrice: nextCustomerPrice,
+        dealerDiscountPercent: nextDraft.dealerDiscountPercent,
+        dealerProfitAmount: nextDealerProfitAmount,
+        dealerProfitCode: nextDealerProfitCode,
         labels,
         values,
       },
     });
-    navigate(returnTo, { state: buildReturnState(nextPositions) });
+
+    const savedServerPrice = remotePrice ?? extractRemotePrice(addProductResponse) ?? nextServerPrice;
+    const savedCustomerPrice = calculateCustomerPrice(savedServerPrice, nextDraft.dealerDiscountPercent);
+    const savedDealerProfitAmount = calculateDealerProfitAmount(savedServerPrice, nextDraft.dealerDiscountPercent);
+    const savedPosition: CalculatorPosition = {
+      ...nextPosition,
+      price: savedCustomerPrice,
+      serverPrice: savedServerPrice,
+      customerPrice: savedCustomerPrice,
+      dealerProfitAmount: savedDealerProfitAmount,
+      dealerProfitCode: buildDealerProfitCode(savedDealerProfitAmount),
+    };
+    const savedPositions = [...positions.filter((item) => item.id !== positionId), savedPosition].sort((a, b) => a.id - b.id);
+
+    setRemotePrice(savedServerPrice);
+    setRemotePriceStatus('success');
+    writeCalculatorPositions(savedPositions);
+    navigate(returnTo, { state: buildReturnState(savedPositions) });
+    } catch (error: unknown) {
+      setRemotePrice(null);
+      setRemotePriceStatus('error');
+      setRemotePriceError(getRemotePriceErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -1048,36 +1781,22 @@ export const CalculatorPage = () => {
             </button>
             <div className="text-center">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Позиция {positionId}</p>
-              <h1 className="text-base font-extrabold text-ink-800">Калькулятор</h1>
+              <h1 className="text-base font-extrabold text-ink-800">
+                {isReadOnly ? 'Просмотр конфигурации' : 'Калькулятор'}
+              </h1>
             </div>
             <button
               type="button"
               onClick={() => navigate(returnTo, { state: buildReturnState() })}
               className="px-2 text-sm font-semibold text-slate-500 hover:text-ink-700"
             >
-              Отмена
+              {isReadOnly ? 'Закрыть' : 'Отмена'}
             </button>
           </div>
         </header>
 
-        <section className="space-y-5 px-4 pb-36 pt-4">
-          <article className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Текущая конфигурация</p>
-            <div className="mt-2 flex items-end justify-between gap-3">
-              <div>
-                <p className="text-2xl font-extrabold leading-none text-ink-800">
-                  {draft.width} x {draft.height} мм
-                </p>
-                <p className="mt-2 text-sm text-slate-500">
-                  {currentOpening.label} · {currentProfile.label} · {currentPackage.label}
-                </p>
-              </div>
-            </div>
-            <p className="mt-2 text-[30px] font-extrabold leading-none text-ink-800">
-              {formatCurrency(totalPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-          </article>
-
+        <fieldset disabled={isReadOnly} className={cn('contents', isReadOnly && 'pointer-events-none')}>
+        <section className={cn('space-y-5 px-4 pt-4', isReadOnly ? 'pb-[calc(10rem+env(safe-area-inset-bottom))]' : 'pb-[calc(400px+env(safe-area-inset-bottom))]')}>
           <section className="space-y-4">
             <h2 className="text-2xl font-bold">Типовая схема</h2>
             <div className="grid grid-cols-2 gap-3">
@@ -1086,7 +1805,13 @@ export const CalculatorPage = () => {
                   key={item.id}
                   type="button"
                   active={draft.openingType === item.id}
-                  onClick={() => setDraft((value) => ({ ...value, openingType: item.id }))}
+                  onClick={() =>
+                    setDraft((value) => ({
+                      ...value,
+                      openingType: item.id,
+                      sashes: normalizeSashesForOpening(item.id, value.sashes),
+                    }))
+                  }
                   className="min-h-[128px] flex-col items-stretch justify-start text-center"
                 >
                   <span className="mb-3 flex h-24 items-center justify-center overflow-hidden rounded-lg px-2 py-1">
@@ -1099,6 +1824,7 @@ export const CalculatorPage = () => {
 
             <div className="space-y-3">
               <div className="space-y-1">
+                <div className="text-xs mb-1 text-center font-bold uppercase tracking-wide text-slate-500">Ширина</div>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
@@ -1109,10 +1835,11 @@ export const CalculatorPage = () => {
                   </button>
                   <label
                     className={cn(
-                      'flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border bg-slate-50 px-3',
+                      'grid h-12 flex-1 grid-cols-[1fr_28px] items-center gap-2 rounded-lg border bg-slate-50 px-3',
                       dimensionError.width ? 'border-error' : 'border-brand-400',
                     )}
                   >
+
                     <input
                       value={dimensionInput.width}
                       inputMode="numeric"
@@ -1134,6 +1861,7 @@ export const CalculatorPage = () => {
               </div>
 
               <div className="space-y-1">
+                <div className="text-xs text-center mb-1 font-bold uppercase tracking-wide text-slate-500">Высота</div>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
@@ -1144,10 +1872,11 @@ export const CalculatorPage = () => {
                   </button>
                   <label
                     className={cn(
-                      'flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border bg-slate-50 px-3',
+                      'grid h-12 flex-1 grid-cols-[1fr_28px] items-center gap-2 rounded-lg border bg-slate-50 px-3',
                       dimensionError.height ? 'border-error' : 'border-slate-300',
                     )}
                   >
+
                     <input
                       value={dimensionInput.height}
                       inputMode="numeric"
@@ -1168,6 +1897,33 @@ export const CalculatorPage = () => {
                 {dimensionError.height ? <p className="text-xs text-error">{dimensionError.height}</p> : null}
               </div>
             </div>
+
+            <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <h2 className="text-xl font-extrabold text-ink-800">Профиль</h2>
+                <p className="text-sm text-slate-500">Выберите профильную систему</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {profileCatalog.map((item) => (
+                  <ChoiceButton
+                    key={item.id}
+                    type="button"
+                    active={draft.profileId === item.id}
+                    onClick={() =>
+                      setDraft((value) => ({
+                        ...value,
+                        profileId: item.id,
+                        windowColor: normalizeWindowColorForProfile(item.id, value.windowColor),
+                      }))
+                    }
+                    className="flex-col items-start gap-1 px-3 py-3"
+                  >
+                    <span className="text-sm font-extrabold text-ink-800">{item.label}</span>
+                    <span className="text-xs font-medium text-slate-500">{item.description}</span>
+                  </ChoiceButton>
+                ))}
+              </div>
+            </section>
 
             <div className="grid gap-3 md:grid-cols-2">
               <div>
@@ -1206,56 +1962,6 @@ export const CalculatorPage = () => {
             </div>
           </section>
 
-          <section className="space-y-4">
-            <h2 className="text-2xl font-bold">Профильная система</h2>
-            <div className="grid grid-cols-1 gap-2">
-              {packageOptions.map((item) => {
-                const Icon = packageIcons[item.id];
-
-                return (
-                  <ChoiceButton
-                    key={item.id}
-                    type="button"
-                    active={draft.packageType === item.id}
-                    onClick={() => setDraft((value) => ({ ...value, packageType: item.id }))}
-                    className="h-14 gap-2 text-sm font-semibold"
-                  >
-                    <Icon className="h-5 w-5" />
-                    {item.label}
-                  </ChoiceButton>
-                );
-              })}
-            </div>
-
-            <div className="grid grid-cols-1 gap-2">
-              {profileCatalog.map((item) => (
-                <ChoiceButton
-                  key={item.id}
-                  type="button"
-                  active={draft.profileId === item.id}
-                  onClick={() => setDraft((value) => ({ ...value, profileId: item.id }))}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <div>
-                    <p className="text-lg font-extrabold">{item.label}</p>
-                    <p className="text-sm text-slate-500">{item.description}</p>
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className={cn(
-                        'mt-2 inline-flex h-6 w-6 items-center justify-center rounded-full border',
-                        draft.profileId === item.id
-                          ? 'border-brand-500 bg-white text-slate-100'
-                          : 'border-slate-300 bg-slate-100 text-slate-100',
-                      )}
-                    >
-                      <Check className="h-4 w-4" />
-                    </span>
-                  </div>
-                </ChoiceButton>
-              ))}
-            </div>
-          </section>
           <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div>
               <h2 className="text-2xl font-bold text-ink-800">Расположение импоста</h2>
@@ -1454,124 +2160,166 @@ export const CalculatorPage = () => {
           <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div>
               <h2 className="text-2xl font-bold text-ink-800">Ламинация</h2>
-              <p className="text-sm text-slate-500">Выберите сторону и цвет окна</p>
+              <p className="text-sm text-slate-500">Снаружи на выбор, внутри всегда белый</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-slate-100 p-1">
-              {windowColorSideOptions.map((item) => {
-                const isAvailable = item.id === 'solid';
-                const isActive = draft.windowColorSide === item.id;
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="mb-3 text-center text-sm font-bold text-ink-800">Снаружи</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {availableWindowColorOptions.map((item) => {
+                    const isActive = draft.windowColor === item.id;
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    disabled={!isAvailable}
-                    onClick={() => {
-                      if (isAvailable) {
-                        setDraft((value) => ({ ...value, windowColorSide: item.id }));
-                      }
-                    }}
-                    className={cn(
-                      'h-9 rounded-lg text-sm font-semibold transition-colors disabled:cursor-not-allowed',
-                      isActive
-                        ? 'text-ink-800 shadow-sm'
-                        : isAvailable
-                          ? 'text-slate-500 hover:text-ink-700'
-                          : 'text-slate-400 opacity-50',
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              {windowColorOptions.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setDraft((value) => ({ ...value, windowColor: item.id }))}
-                  className="group text-center"
-                >
-                  <span
-                    className={cn(
-                      'mb-2 inline-flex h-16 w-16 items-center justify-center rounded-full border-2 border-transparent transition-all',
-                      draft.windowColor === item.id ? 'border-brand-500 ring-2 ring-brand-200' : 'border-slate-200',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'inline-flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 text-white',
-                        item.swatchClassName,
-                      )}
-                    >
-                      {draft.windowColor === item.id ? <Check className="h-5 w-5" /> : null}
+                    return (
+                      <button
+                        key={`outside-${item.id}`}
+                        type="button"
+                        onClick={() => setDraft((value) => ({ ...value, windowColorSide: 'outside', windowColor: item.id }))}
+                        className="group text-center"
+                      >
+                        <span
+                          className={cn(
+                            'mb-2 inline-flex h-14 w-14 items-center justify-center rounded-full border-2 border-transparent transition-all',
+                            isActive ? 'border-brand-500 ring-2 ring-brand-200' : 'border-slate-200',
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-300 text-white',
+                              item.swatchClassName,
+                            )}
+                          >
+                            {isActive ? <Check className={cn('h-5 w-5', item.id === 'white' ? 'text-black' : 'text-white')} /> : null}
+                          </span>
+                        </span>
+                        <span
+                          className={cn(
+                            'block text-xs font-semibold',
+                            isActive ? 'text-brand-600' : 'text-slate-600 group-hover:text-ink-700',
+                          )}
+                        >
+                          {item.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {!laminateProfileIds.has(draft.profileId) ? (
+                  <p className="mt-3 text-center text-xs font-semibold text-slate-500">
+                    Для выбранного профиля доступен только белый
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <p className="mb-3 text-center text-sm font-bold text-ink-800">Внутри</p>
+                <div className="grid grid-cols-1 justify-items-center gap-3">
+                  <div className="text-center">
+                    <span className="mb-2 inline-flex h-14 w-14 items-center justify-center rounded-full border-2 border-brand-500 ring-2 ring-brand-200">
+                      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-300 bg-white">
+                        <Check className="h-5 w-5 text-black" />
+                      </span>
                     </span>
-                  </span>
-                  <span
-                    className={cn(
-                      'block text-xs font-semibold',
-                      draft.windowColor === item.id ? 'text-brand-600' : 'text-slate-600 group-hover:text-ink-700',
-                    )}
-                  >
-                    {item.label}
-                  </span>
-                </button>
-              ))}
+                    <span className="block text-xs font-semibold text-brand-600">Белый</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
-          <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {hasActiveSashes ? (
+            <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div>
-              <h2 className="text-2xl font-bold text-ink-800">Выбор ручки</h2>
+              <h2 className="text-2xl font-bold text-ink-800">Москитная сетка</h2>
+              <p className="text-sm text-slate-500">Выберите створки, где нужна сетка</p>
+            </div>
+
+            <div className="relative mx-auto aspect-[4/3] w-full max-w-[420px] overflow-hidden rounded-lg border border-slate-300 bg-slate-100 p-4">
+              <img src={currentOpening.image} alt="" className="absolute inset-4 h-[calc(100%-2rem)] w-[calc(100%-2rem)] object-contain" />
+              <div
+                className="absolute left-1/2 top-1/2 grid h-[72%] w-[74%] -translate-x-1/2 -translate-y-1/2 gap-1"
+                style={{ gridTemplateColumns: `repeat(${sashLayout.length}, minmax(0, 1fr))` }}
+              >
+                {sashLayout.map((sash) => {
+                  const isActive = selectedMosquitoScreens.includes(sash.id);
+
+                  return (
+                    <button
+                      key={sash.id}
+                      type="button"
+                      onClick={() => toggleMosquitoScreen(sash.id)}
+                      className={cn(
+                        'relative flex h-full w-full items-center justify-center rounded-md border-2 text-[11px] font-extrabold transition-all',
+                        isActive
+                          ? 'border-brand-500 bg-brand-500/35 text-white shadow-sm'
+                          : 'border-slate-400 bg-slate-100/20 text-slate-500 hover:border-brand-400 hover:bg-brand-50/30 hover:text-ink-800',
+                      )}
+                      aria-label={`Москитная сетка: ${sash.label}`}
+                    >
+                      <span className="inline-flex h-7 min-w-6 items-center justify-center rounded-full border border-slate-300 bg-surface px-2">
+                        {isActive ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            </section>
+          ) : null}
+
+          {hasActiveSashes ? (
+            <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <h2 className="text-2xl font-bold text-ink-800">Выбор ручки</h2>
               <p className="text-sm text-slate-500">Тип ручки и цвет фурнитуры</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              {handleTypeOptions.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setDraft((value) => ({ ...value, handleType: item.id }))}
-                  className={cn(
-                    'rounded-xl border p-3 text-center transition-colors',
-                    draft.handleType === item.id
-                      ? 'border-brand-500 bg-brand-500 text-white'
-                      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300',
-                  )}
-                >
-                  <span className="mx-auto mb-2 inline-flex h-12 w-12 items-center justify-center rounded-lg border border-current/30">
-                    <span className="h-5 w-2 rounded-sm bg-current" />
-                  </span>
-                  <span className="block text-sm font-semibold">{item.label}</span>
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => setDraft((value) => ({ ...value, handleType: 'standard' }))}
+              className="flex w-full items-center gap-3 rounded-xl border border-brand-500 bg-brand-500 p-3 text-left text-white"
+            >
+              <span className="inline-flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/40 bg-white">
+                <img src={accadoHandleImage} alt="" className="h-full w-full object-contain" />
+              </span>
+              <span className="text-lg font-extrabold">ACCADO</span>
+            </button>
 
             <article className="rounded-xl border border-slate-200 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-slate-500">Цвет ручки</p>
                 <p className="text-sm font-semibold text-brand-600">{currentHandleColor.label}</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 {handleColorOptions.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => setDraft((value) => ({ ...value, handleColor: item.id }))}
-                    className={cn(
-                      'inline-flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all',
-                      draft.handleColor === item.id ? 'border-brand-500 ring-2 ring-brand-100' : 'border-slate-200',
-                    )}
-                    aria-label={item.label}
+                    className="group text-center"
                   >
-                    <span className={cn('h-6 w-6 rounded-full border border-slate-300', item.swatchClassName)} />
+                    <span
+                      className={cn(
+                        'mx-auto mb-2 inline-flex h-9 w-9 items-center justify-center rounded-full border-2 transition-all',
+                        draft.handleColor === item.id ? 'border-brand-500 ring-2 ring-brand-100' : 'border-slate-200',
+                      )}
+                    >
+                      <span className={cn('h-7 w-7 rounded-full border border-slate-300', item.swatchClassName)} />
+                    </span>
+                    <span
+                      className={cn(
+                        'block text-[10px] font-semibold leading-tight',
+                        draft.handleColor === item.id ? 'text-brand-600' : 'text-slate-600 group-hover:text-ink-700',
+                      )}
+                    >
+                      {item.label}
+                    </span>
                   </button>
                 ))}
               </div>
             </article>
-          </section>
+            </section>
+          ) : null}
 
           <section className="rounded-xl border border-dashed border-slate-200 px-3 py-3">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -1596,16 +2344,24 @@ export const CalculatorPage = () => {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-ink-800">{option.type === 'sill' ? 'Подоконник' : 'Отлив'}</p>
-                        <p className="mt-1 text-sm text-slate-500">{`${option.length ?? 0} x ${option.width ?? 0} мм`}</p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {option.type === 'sill'
+                            ? `Длина: ${option.length ?? 0} мм · ширина: ${option.width ?? 0} мм`
+                            : `Ширина: ${option.width ?? 180} мм`}
+                        </p>
                         {option.type === 'sill' ? (
-                          <p className="text-sm text-slate-500">
-                            Цвет: {sillColorOptions.find((item) => item.id === option.sillColor)?.label ?? 'Белый'}
-                          </p>
+                          <>
+                            <p className="text-sm text-slate-500">
+                              Тип: {sillTypeLabels.fineber}
+                            </p>
+                          </>
                         ) : (
-                          <p className="text-sm text-slate-500">Материал отлива задается на производстве</p>
+                          <p className="text-sm text-slate-500">
+                            Цвет: {option.dripColor ? dripColorLabels[option.dripColor] : 'Белый'}
+                          </p>
                         )}
                       </div>
-                      <p className="text-lg font-extrabold text-ink-800">{formatCurrency(getOptionPrice(option))}</p>
+                      <p className="text-lg font-extrabold text-ink-800">{formatCurrency(getOptionPrice(option, draft.width))}</p>
                     </div>
                     <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
                       <button
@@ -1635,27 +2391,80 @@ export const CalculatorPage = () => {
             )}
           </section>
         </section>
+        </fieldset>
 
-        <footer className="fixed bottom-0 left-1/2 z-50 w-[calc(100%-1rem)] max-w-[560px] -translate-x-1/2 border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-panel backdrop-blur-sm">
-          {/* <div className="mb-3 flex items-end justify-between gap-2">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Стоимость</p>
-              <p className="text-[38px] font-extrabold leading-none tracking-tight text-ink-800">
-                {formatCurrency(totalPrice, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
+        {isReadOnly ? (
+          <footer className="fixed bottom-[calc(57px+max(0.5rem,env(safe-area-inset-bottom)))] left-1/2 z-30 w-[calc(100%-1rem)] max-w-[560px] -translate-x-1/2 border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-panel backdrop-blur-sm">
+            <Button className="h-12 text-base" onClick={() => navigate(returnTo, { state: buildReturnState() })}>
+              Вернуться к заказу
+            </Button>
+          </footer>
+        ) : (
+        <footer className="fixed bottom-[calc(57px+max(0.5rem,env(safe-area-inset-bottom)))] left-1/2 z-30 w-[calc(100%-1rem)] max-w-[560px] -translate-x-1/2 space-y-3 border border-slate-200 bg-surface/95 px-4 pb-4 pt-3 shadow-panel backdrop-blur-sm">
+          <article className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Текущая конфигурация</p>
+                <p className="mt-2 text-2xl font-extrabold leading-none text-ink-800">
+                  {draft.width} x {draft.height} мм
+                </p>
+                <p className="mt-2 truncate text-sm text-slate-500">{currentOpening.label}</p>
+              </div>
+              <div className="w-44 shrink-0">
+                <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-500">
+                  <span>Скидка</span>
+                  <span>{draft.dealerDiscountPercent}%</span>
+                </div>
+                <div className="grid h-10 grid-cols-[40px_1fr_40px] overflow-hidden rounded-lg border border-slate-300 bg-slate-100">
+                  <button type="button" onClick={() => adjustDealerDiscountPercent(-1)} className="flex items-center justify-center">
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <label className="flex items-center justify-center gap-1 border-x border-slate-300 px-1">
+                    <input
+                      value={draft.dealerDiscountPercent}
+                      inputMode="numeric"
+                      onChange={(event) => {
+                        const digits = normalizeNumericInput(event.target.value);
+                        setDealerDiscountPercent(digits ? Number.parseInt(digits, 10) : 0);
+                      }}
+                      className="w-full border-none bg-transparent text-center text-base font-extrabold text-ink-800 outline-none"
+                    />
+                    <Percent className="h-4 w-4 text-slate-500" />
+                  </label>
+                  <button type="button" onClick={() => adjustDealerDiscountPercent(1)} className="flex items-center justify-center">
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-600">
-              {currentWindowColor.label}
-            </span>
-          </div> */}
-          <Button className="h-12 text-base" onClick={save}>
+
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[30px] font-extrabold leading-none text-ink-800">{totalPriceLabel}</p>
+                {remotePriceStatus === 'loading' ? (
+                  <p className="mt-2 text-xs font-semibold text-slate-500">Получаем цену...</p>
+                ) : remotePriceStatus === 'error' ? (
+                  <p className="mt-2 text-xs font-semibold text-error">{remotePriceError}</p>
+                ) : remotePriceStatus === 'success' ? (
+                  <p className="mt-2 text-xs font-semibold text-slate-500">Цена с сервера: {serverPriceLabel}</p>
+                ) : null}
+              </div>
+              <div className="text-right">
+
+                <p className="text-xl font-extrabold text-ink-800">{dealerProfitCode}</p>
+              </div>
+            </div>
+          </article>
+          <Button className="h-12 text-base" loading={isSaving} onClick={save}>
             Сохранить позицию
             <ChevronRight className="h-4 w-4" />
           </Button>
         </footer>
+        )}
+        <BottomNav />
       </main>
 
-      {isOptionDialogOpen ? (
+      {!isReadOnly && isOptionDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">
           <div className="z-100 w-full max-w-[540px] rounded-xl bg-surface p-4 shadow-panel">
             <div className="mb-4 flex items-center justify-between">
@@ -1680,7 +2489,14 @@ export const CalculatorPage = () => {
                 <ChoiceButton
                   type="button"
                   active={optionForm.type === 'sill'}
-                  onClick={() => setOptionForm((value) => ({ ...value, type: 'sill' }))}
+                  onClick={() =>
+                    setOptionForm((value) => ({
+                      ...value,
+                      type: 'sill',
+                      length: value.length || draft.width,
+                      width: sillDepthOptions.includes(value.width) ? value.width : 300,
+                    }))
+                  }
                   className="h-11 text-center text-sm font-semibold"
                 >
                   Подоконник
@@ -1688,63 +2504,101 @@ export const CalculatorPage = () => {
                 <ChoiceButton
                   type="button"
                   active={optionForm.type === 'drip'}
-                  onClick={() => setOptionForm((value) => ({ ...value, type: 'drip' }))}
+                  onClick={() =>
+                    setOptionForm((value) => ({
+                      ...value,
+                      type: 'drip',
+                      width: dripDepthOptions.includes(value.width) ? value.width : 180,
+                    }))
+                  }
                   className="h-11 text-center text-sm font-semibold"
                 >
                   Отлив
                 </ChoiceButton>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <label className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              {optionForm.type === 'sill' ? (
+                <label className="rounded-xl block border border-slate-200 bg-slate-50 px-3 py-2">
                   <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Длина, мм</span>
                   <input
-                    value={optionForm.length}
+                    value={optionForm.length || ''}
                     inputMode="numeric"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const digits = normalizeNumericInput(event.target.value);
                       setOptionForm((value) => ({
                         ...value,
-                        length: clampOptionLength(Number.parseInt(event.target.value.replace(/\D/g, '') || '300', 10)),
+                        length: digits ? Number.parseInt(digits, 10) : 0,
+                      }));
+                    }}
+                    onBlur={() =>
+                      setOptionForm((value) => ({
+                        ...value,
+                        length: clampSillLength(value.length || draft.width),
                       }))
                     }
-                    className="w-full border-none bg-transparent text-lg font-extrabold text-ink-800 outline-none"
+                    className="h-9 w-full border-none bg-transparent text-base font-extrabold text-ink-800 outline-none"
                   />
                 </label>
+              ) : null}
+
+              <div className={optionForm.type === 'sill' ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-1 gap-3'}>
+                {optionForm.type === 'sill' ? (
+                  <label className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Тип</span>
+                    <select
+                      value={optionForm.sillType}
+                      onChange={(event) =>
+                        setOptionForm((value) => ({ ...value, sillType: event.target.value as SillType }))
+                      }
+                      className="h-9 w-full border-none bg-surface text-base font-extrabold text-ink-800 outline-none"
+                    >
+                      {sillTypeOptions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
                 <label className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ширина, мм</span>
-                  <input
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ширина</span>
+                  <select
                     value={optionForm.width}
-                    inputMode="numeric"
                     onChange={(event) =>
-                      setOptionForm((value) => ({
-                        ...value,
-                        width: clampOptionWidth(Number.parseInt(event.target.value.replace(/\D/g, '') || '50', 10)),
-                      }))
+                      setOptionForm((value) => ({ ...value, width: Number.parseInt(event.target.value, 10) }))
                     }
-                    className="w-full border-none bg-transparent text-lg font-extrabold text-ink-800 outline-none"
-                  />
+                    className="h-9 w-full border-none bg-surface text-base font-extrabold text-ink-800 outline-none"
+                  >
+                    {(optionForm.type === 'sill' ? sillDepthOptions : dripDepthOptions).map((depth) => (
+                      <option key={depth} value={depth}>
+                        {depth} мм
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
 
-              {optionForm.type === 'sill' ? (
+              {optionForm.type === 'drip' ? (
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Цвет подоконника</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Цвет отлива</p>
                   <div className="grid grid-cols-3 gap-2">
-                    {sillColorOptions.map((item) => (
+                    {dripColorOptions.map((item) => (
                       <ChoiceButton
                         key={item.id}
                         type="button"
-                        active={optionForm.sillColor === item.id}
-                        onClick={() => setOptionForm((value) => ({ ...value, sillColor: item.id }))}
-                        className="h-10 px-2 text-center text-xs font-semibold"
+                        active={optionForm.dripColor === item.id}
+                        onClick={() => setOptionForm((value) => ({ ...value, dripColor: item.id }))}
+                        className="h-12 px-2 text-center text-xs font-semibold"
                       >
+                        <span className={cn('h-4 w-4 rounded-full border border-slate-300 shrink-0', item.swatchClassName)} />
                         {item.label}
                       </ChoiceButton>
                     ))}
                   </div>
                 </div>
               ) : (
-                <></>
+                null
               )}
 
               <div className="flex gap-3">

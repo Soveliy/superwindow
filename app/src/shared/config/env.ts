@@ -35,8 +35,8 @@ const normalizeBoolean = (value: string | undefined, fallback: boolean): boolean
 
 export const env = {
   apiBaseUrl: normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL),
-  devAuthEnabled: normalizeBoolean(import.meta.env.VITE_DEV_AUTH_ENABLED, true),
-  devAuthLogin: normalizeString(import.meta.env.VITE_DEV_AUTH_LOGIN, 'demo'),
-  devAuthPassword: normalizeString(import.meta.env.VITE_DEV_AUTH_PASSWORD, 'demo123'),
-  devAuthDealerId: normalizeString(import.meta.env.VITE_DEV_AUTH_DEALER_ID, 'DEV-0001'),
+  devAuthEnabled: import.meta.env.DEV && normalizeBoolean(import.meta.env.VITE_DEV_AUTH_ENABLED, false),
+  devAuthLogin: import.meta.env.DEV ? normalizeString(import.meta.env.VITE_DEV_AUTH_LOGIN, 'demo') : '',
+  devAuthPassword: import.meta.env.DEV ? normalizeString(import.meta.env.VITE_DEV_AUTH_PASSWORD, 'demo123') : '',
+  devAuthDealerId: import.meta.env.DEV ? normalizeString(import.meta.env.VITE_DEV_AUTH_DEALER_ID, 'DEV-0001') : '',
 };

@@ -31,8 +31,8 @@ export const LoginForm = ({ isSubmitting, serverError, onSubmit }: LoginFormProp
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
       <TextField
-        label="Email или ID дилера"
-        placeholder="Введите ваш ID"
+        label="Email, телефон или ID дилера"
+        placeholder="Введите логин"
         autoComplete="username"
         error={errors.emailOrDealerId?.message}
         {...register('emailOrDealerId')}

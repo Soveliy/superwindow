@@ -18,13 +18,46 @@ export type OpeningMode = 'fixed' | 'turn' | 'tilt_turn' | 'fanlight';
 export type WindowColorSide = 'outside' | 'inside' | 'solid';
 export type WindowColor = 'white' | 'anthracite' | 'golden_oak' | 'dark_oak' | 'mahogany' | 'silver';
 export type HandleType = 'standard' | 'premium' | 'design';
-export type HandleColor = 'white' | 'brown' | 'silver' | 'gold';
+export type HandleColor = 'white' | 'anthracite' | 'brown' | 'light_brown' | 'black';
+export type SillType = 'fineber' | 'komfort';
 export type SillColor = 'white' | 'brown' | 'anthracite';
+export type DripColor = 'white' | 'brown' | 'gray';
 export type MullionOrientation = 'vertical' | 'horizontal';
 export type MullionOffsets = Record<string, number>;
 export type SashId = 'single' | 'left' | 'center' | 'right';
 export type HandlePosition = 'none' | 'left' | 'right' | 'top';
 export type AdditionalOptionType = 'sill' | 'drip';
+export type CalculatorProductionContourId = 1 | 2 | 3;
+
+export interface CalculatorProductionContour {
+  id: CalculatorProductionContourId;
+  parameters?: Array<Record<string, string>>;
+}
+
+export interface CalculatorProductionAccessory {
+  id: number;
+  article: string;
+  color: string;
+  quantity: string;
+  length: string;
+  width: string;
+}
+
+export interface CalculatorProductionQuery {
+  type_id: number;
+  width: number;
+  height: number;
+  system_id: string;
+  color: string;
+  discount?: string;
+  mullionOffset: Array<Record<string, number>>;
+  parameters: {
+    sealColor: string;
+    drainage: string;
+  };
+  contours: CalculatorProductionContour[];
+  accessories?: CalculatorProductionAccessory[];
+}
 
 export interface CalculatorSashConfig {
   id: SashId;
@@ -38,7 +71,9 @@ export interface CalculatorAdditionalOption {
   type: AdditionalOptionType;
   length?: number;
   width?: number;
+  sillType?: SillType;
   sillColor?: SillColor;
+  dripColor?: DripColor;
 }
 
 export interface CalculatorPosition {
@@ -46,6 +81,11 @@ export interface CalculatorPosition {
   width?: number;
   height?: number;
   price?: number;
+  serverPrice?: number;
+  customerPrice?: number;
+  dealerDiscountPercent?: number;
+  dealerProfitAmount?: number;
+  dealerProfitCode?: string;
   openingType?: OpeningType;
   profileId?: string;
   packageType?: PackageType;
@@ -67,6 +107,7 @@ export interface CalculatorPosition {
   extSillEnabled?: boolean;
   intSillEnabled?: boolean;
   underSillEnabled?: boolean;
+  productionQuery?: CalculatorProductionQuery;
 }
 
 const CALCULATOR_POSITIONS_STORAGE_KEY = 'superwindow.calculator.positions.v1';
@@ -92,12 +133,15 @@ const openingModes = ['fixed', 'turn', 'tilt_turn', 'fanlight'] as const;
 const windowColorSides = ['outside', 'inside', 'solid'] as const;
 const windowColors = ['white', 'anthracite', 'golden_oak', 'dark_oak', 'mahogany', 'silver'] as const;
 const handleTypes = ['standard', 'premium', 'design'] as const;
-const handleColors = ['white', 'brown', 'silver', 'gold'] as const;
+const handleColors = ['white', 'anthracite', 'brown', 'light_brown', 'black'] as const;
+const sillTypes = ['fineber', 'komfort'] as const;
 const sillColors = ['white', 'brown', 'anthracite'] as const;
+const dripColors = ['white', 'brown', 'gray'] as const;
 const mullionOrientations = ['vertical', 'horizontal'] as const;
 const sashIds = ['single', 'left', 'center', 'right'] as const;
 const handlePositions = ['none', 'left', 'right', 'top'] as const;
 const additionalOptionTypes = ['sill', 'drip'] as const;
+const SUPPORTED_DRIP_DEPTH = 180;
 
 const legacyOpeningTypes = ['single', 'double', 'triple', 'balcony'] as const;
 
@@ -117,12 +161,14 @@ const isOptionalOneOf = <T extends string>(value: unknown, values: readonly T[])
   typeof value === 'undefined' || isOneOf(value, values);
 
 const normalizePositionId = (value: number): number => Math.max(1, Math.trunc(value));
-const normalizeOptionalNumber = (value: number | undefined): number | undefined =>
+const normalizeOptionalNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : undefined;
 const normalizeOptionalBoolean = (value: boolean | undefined): boolean | undefined =>
   typeof value === 'boolean' ? value : undefined;
 const normalizeOptionalString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+const normalizeProductionLiteralString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 const normalizeOptionalEnum = <T extends string>(value: unknown, values: readonly T[]): T | undefined =>
   isOneOf(value, values) ? value : undefined;
 
@@ -174,6 +220,158 @@ const normalizeMullionOffsets = (value: unknown): MullionOffsets | undefined => 
   return normalized;
 };
 
+const normalizeProductionStringRecord = (value: unknown): Record<string, string> | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(value)
+    .map(([key, item]) => [key.trim(), typeof item === 'string' ? item : ''] as const)
+    .filter(([key, item]) => key.length > 0 && item.length > 0);
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
+
+const normalizeProductionMullionOffset = (value: unknown): Array<Record<string, number>> => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isRecord)
+    .map((item) => {
+      const entries = Object.entries(item)
+        .filter(([key, offset]) => /^\d+$/.test(key) && typeof offset === 'number' && Number.isFinite(offset) && offset >= 0)
+        .map(([key, offset]) => [String(Math.max(1, Math.trunc(Number.parseInt(key, 10)))), Math.max(0, Math.trunc(offset as number))]);
+
+      return entries.length > 0 ? Object.fromEntries(entries) : null;
+    })
+    .filter((item): item is Record<string, number> => item !== null);
+};
+
+const normalizeProductionContourId = (value: unknown): CalculatorProductionContourId | undefined =>
+  value === 1 || value === 2 || value === 3 ? value : undefined;
+
+const normalizeProductionContours = (value: unknown): CalculatorProductionContour[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isRecord)
+    .map((item) => {
+      const id = normalizeProductionContourId(item.id);
+
+      if (!id) {
+        return null;
+      }
+
+      const parameters = Array.isArray(item.parameters)
+        ? item.parameters
+            .map(normalizeProductionStringRecord)
+            .filter((parameter): parameter is Record<string, string> => Boolean(parameter))
+        : [];
+
+      return {
+        id,
+        ...(parameters.length > 0 ? { parameters } : {}),
+      };
+    })
+    .filter((item): item is CalculatorProductionContour => item !== null);
+};
+
+const normalizeProductionAccessory = (value: unknown): CalculatorProductionAccessory | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const id = normalizeOptionalNumber(value.id);
+  const article = normalizeOptionalString(value.article);
+  const color = normalizeProductionLiteralString(value.color);
+  const quantity = normalizeOptionalString(value.quantity);
+  const length = normalizeOptionalString(value.length);
+  const width = normalizeOptionalString(value.width);
+
+  if (
+    typeof id !== 'number' ||
+    typeof article !== 'string' ||
+    typeof color !== 'string' ||
+    typeof quantity !== 'string' ||
+    typeof length !== 'string' ||
+    typeof width !== 'string'
+  ) {
+    return undefined;
+  }
+
+  return {
+    id,
+    article,
+    color,
+    quantity,
+    length,
+    width,
+  };
+};
+
+const normalizeProductionAccessories = (value: unknown): CalculatorProductionAccessory[] | undefined => {
+  if (Array.isArray(value)) {
+    const accessories = value
+      .map(normalizeProductionAccessory)
+      .filter((accessory): accessory is CalculatorProductionAccessory => Boolean(accessory));
+
+    return accessories.length > 0 ? accessories : undefined;
+  }
+
+  const accessory = normalizeProductionAccessory(value);
+
+  return accessory ? [accessory] : undefined;
+};
+
+export const normalizeCalculatorProductionQuery = (value: unknown): CalculatorProductionQuery | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const typeId = normalizeOptionalNumber(value.type_id);
+  const width = normalizeOptionalNumber(value.width);
+  const height = normalizeOptionalNumber(value.height);
+  const systemId = normalizeOptionalString(value.system_id);
+  const color = normalizeOptionalString(value.color);
+
+  if (
+    typeof typeId !== 'number' ||
+    typeof width !== 'number' ||
+    typeof height !== 'number' ||
+    typeof systemId !== 'string' ||
+    typeof color !== 'string'
+  ) {
+    return undefined;
+  }
+
+  const parametersSource = isRecord(value.parameters) ? value.parameters : {};
+  const sealColor = normalizeOptionalString(parametersSource.sealColor) ?? '';
+  const drainage = normalizeOptionalString(parametersSource.drainage) ?? '';
+  const discount = normalizeOptionalString(value.discount);
+  const contours = normalizeProductionContours(value.contours);
+  const accessories = normalizeProductionAccessories(value.accessories);
+
+  return {
+    type_id: typeId,
+    width,
+    height,
+    system_id: systemId,
+    color,
+    ...(discount ? { discount } : {}),
+    mullionOffset: normalizeProductionMullionOffset(value.mullionOffset),
+    parameters: {
+      sealColor,
+      drainage,
+    },
+    contours,
+    ...(accessories ? { accessories } : {}),
+  };
+};
+
 const isCalculatorSashConfig = (value: unknown): value is CalculatorSashConfig => {
   if (!isRecord(value)) {
     return false;
@@ -219,7 +417,9 @@ const isCalculatorAdditionalOption = (value: unknown): value is CalculatorAdditi
     isOptionalOneOf(value.type, additionalOptionTypes) &&
     isOptionalNumber(value.length) &&
     isOptionalNumber(value.width) &&
-    isOptionalOneOf(value.sillColor, sillColors)
+    isOptionalOneOf(value.sillType, sillTypes) &&
+    isOptionalOneOf(value.sillColor, sillColors) &&
+    isOptionalOneOf(value.dripColor, dripColors)
   );
 };
 
@@ -231,16 +431,26 @@ const normalizeAdditionalOption = (option: CalculatorAdditionalOption): Calculat
 
   const length = normalizeOptionalNumber(option.length);
   const width = normalizeOptionalNumber(option.width);
+  const sillType = normalizeOptionalEnum(option.sillType, sillTypes);
   const sillColor = normalizeOptionalEnum(option.sillColor, sillColors);
+  const dripColor = normalizeOptionalEnum(option.dripColor, dripColors);
 
   if (typeof length === 'number') {
     normalized.length = length;
   }
-  if (typeof width === 'number') {
+  if (normalized.type === 'drip') {
+    normalized.width = SUPPORTED_DRIP_DEPTH;
+  } else if (typeof width === 'number') {
     normalized.width = width;
+  }
+  if (sillType) {
+    normalized.sillType = sillType;
   }
   if (sillColor) {
     normalized.sillColor = sillColor;
+  }
+  if (dripColor) {
+    normalized.dripColor = dripColor;
   }
 
   return normalized;
@@ -256,6 +466,11 @@ export const isCalculatorPosition = (value: unknown): value is CalculatorPositio
     isOptionalNumber(value.width) &&
     isOptionalNumber(value.height) &&
     isOptionalNumber(value.price) &&
+    isOptionalNumber(value.serverPrice) &&
+    isOptionalNumber(value.customerPrice) &&
+    isOptionalNumber(value.dealerDiscountPercent) &&
+    isOptionalNumber(value.dealerProfitAmount) &&
+    isOptionalString(value.dealerProfitCode) &&
     (typeof value.openingType === 'undefined' || normalizeOpeningType(value.openingType) !== undefined) &&
     isOptionalString(value.profileId) &&
     isOptionalOneOf(value.packageType, packageTypes) &&
@@ -277,7 +492,9 @@ export const isCalculatorPosition = (value: unknown): value is CalculatorPositio
     isOptionalBoolean(value.childLock) &&
     isOptionalBoolean(value.extSillEnabled) &&
     isOptionalBoolean(value.intSillEnabled) &&
-    isOptionalBoolean(value.underSillEnabled)
+    isOptionalBoolean(value.underSillEnabled) &&
+    (typeof value.productionQuery === 'undefined' ||
+      normalizeCalculatorProductionQuery(value.productionQuery) !== undefined)
   );
 };
 
@@ -289,6 +506,11 @@ export const normalizeCalculatorPosition = (position: CalculatorPosition): Calcu
   const width = normalizeOptionalNumber(position.width);
   const height = normalizeOptionalNumber(position.height);
   const price = normalizeOptionalNumber(position.price);
+  const serverPrice = normalizeOptionalNumber(position.serverPrice);
+  const customerPrice = normalizeOptionalNumber(position.customerPrice);
+  const dealerDiscountPercent = normalizeOptionalNumber(position.dealerDiscountPercent);
+  const dealerProfitAmount = normalizeOptionalNumber(position.dealerProfitAmount);
+  const dealerProfitCode = normalizeOptionalString(position.dealerProfitCode);
   const openingType = normalizeOpeningType(position.openingType);
   const profileId = normalizeOptionalString(position.profileId);
   const packageType = normalizeOptionalEnum(position.packageType, packageTypes);
@@ -312,6 +534,7 @@ export const normalizeCalculatorPosition = (position: CalculatorPosition): Calcu
   const extSillEnabled = normalizeOptionalBoolean(position.extSillEnabled);
   const intSillEnabled = normalizeOptionalBoolean(position.intSillEnabled);
   const underSillEnabled = normalizeOptionalBoolean(position.underSillEnabled);
+  const productionQuery = normalizeCalculatorProductionQuery(position.productionQuery);
 
   if (typeof width === 'number') {
     normalized.width = width;
@@ -321,6 +544,21 @@ export const normalizeCalculatorPosition = (position: CalculatorPosition): Calcu
   }
   if (typeof price === 'number') {
     normalized.price = price;
+  }
+  if (typeof serverPrice === 'number') {
+    normalized.serverPrice = serverPrice;
+  }
+  if (typeof customerPrice === 'number') {
+    normalized.customerPrice = customerPrice;
+  }
+  if (typeof dealerDiscountPercent === 'number') {
+    normalized.dealerDiscountPercent = dealerDiscountPercent;
+  }
+  if (typeof dealerProfitAmount === 'number') {
+    normalized.dealerProfitAmount = dealerProfitAmount;
+  }
+  if (dealerProfitCode) {
+    normalized.dealerProfitCode = dealerProfitCode;
   }
   if (openingType) {
     normalized.openingType = openingType;
@@ -384,6 +622,9 @@ export const normalizeCalculatorPosition = (position: CalculatorPosition): Calcu
   }
   if (typeof underSillEnabled === 'boolean') {
     normalized.underSillEnabled = underSillEnabled;
+  }
+  if (productionQuery) {
+    normalized.productionQuery = productionQuery;
   }
 
   return normalized;

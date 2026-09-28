@@ -30,23 +30,12 @@ export const tryDevLogin = (payload: LoginRequest): LoginResponse | null => {
     return null;
   }
 
-  // For static demo builds (GitHub Pages) where API is not configured,
-  // authenticate locally and skip network requests completely.
-  if (!env.apiBaseUrl) {
-    const fallbackDealerId = payload.emailOrDealerId.trim() || credentials.dealerId;
-
-    return {
-      token: `demo-token-${Date.now()}`,
-      dealerId: fallbackDealerId,
-    };
-  }
-
   if (!areCredentialsMatched(payload, credentials)) {
     return null;
   }
 
   return {
-    token: `dev-token-${Date.now()}`,
+    token: `${env.apiBaseUrl ? 'dev' : 'demo'}-token-${Date.now()}`,
     dealerId: credentials.dealerId,
   };
 };

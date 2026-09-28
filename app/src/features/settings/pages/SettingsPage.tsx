@@ -11,11 +11,16 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/app/layout/BottomNav';
+import { logoutRequest } from '@/features/auth/api/login';
 import { authStorage } from '@/features/auth/model/auth-storage';
 import { type AppTheme, useTheme } from '@/shared/theme/ThemeProvider';
 import { Button } from '@/shared/ui/Button';
 
-const menuItems = [
+const menuItems: Array<{
+  title: string;
+  icon: typeof Bell;
+  to?: string;
+}> = [
   {
     title: 'Профиль компании',
     icon: Building2,
@@ -23,12 +28,13 @@ const menuItems = [
   {
     title: 'Настройки уведомлений',
     icon: Bell,
+    to: '/settings/notifications',
   },
   {
     title: 'Безопасность и пароль',
     icon: LockKeyhole,
   },
-] as const;
+];
 
 const themeOptions: Array<{ id: AppTheme; label: string; icon: typeof Sun }> = [
   { id: 'dark', label: 'Темная', icon: Moon },
@@ -38,10 +44,16 @@ const themeOptions: Array<{ id: AppTheme; label: string; icon: typeof Sun }> = [
 export const SettingsPage = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const session = authStorage.getSession();
 
-  const handleLogout = (): void => {
-    authStorage.clearSession();
-    navigate('/login', { replace: true });
+  const handleLogout = async (): Promise<void> => {
+    try {
+      await logoutRequest();
+    } catch {
+    } finally {
+      authStorage.clearSession();
+      navigate('/login', { replace: true });
+    }
   };
 
   return (
@@ -65,10 +77,12 @@ export const SettingsPage = () => {
               <UserRound className="h-8 w-8" />
             </div>
             <p className="text-[30px] font-extrabold leading-none tracking-tight text-ink-800">
-            Дилерский центр
+              {session?.dealerName || 'Дилерский центр'}
             </p>
-            <p className="mt-1 text-sm text-slate-500">john.dealer@example.com</p>
-            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-brand-600">ID дилера #88234</p>
+            <p className="mt-1 text-sm text-slate-500">{session?.dealerEmail || session?.dealerLogin || 'Аккаунт дилера'}</p>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-brand-600">
+              ID дилера #{session?.dealerId || '-'}
+            </p>
           </div>
 
           <article className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -120,59 +134,6 @@ export const SettingsPage = () => {
             </div>
           </article>
 
-          {/* <article className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <h2 className="mb-1 text-xl font-extrabold tracking-tight text-ink-800">Даты изготовления</h2>
-            <p className="text-xs text-slate-500">Эти даты будут доступны менеджеру при выборе даты изготовления заказа.</p>
-
-            <div className="mt-4 flex gap-2">
-              <label className="flex-1 rounded-xl border border-slate-300 bg-slate-100 px-3">
-                <span className="sr-only">Дата изготовления</span>
-                <input
-                  type="date"
-                  value={productionDateInput}
-                  onChange={(event) => setProductionDateInput(event.target.value)}
-                  className="h-12 w-full border-none bg-transparent text-sm font-semibold text-ink-800 outline-none"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={addProductionDate}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 text-sm font-semibold text-brand-600 hover:bg-brand-100"
-              >
-                <CalendarPlus2 className="h-4 w-4" />
-                Добавить
-              </button>
-            </div>
-
-            {productionDates.length > 0 ? (
-              <div className="mt-4 space-y-2">
-                {productionDates.map((date) => (
-                  <div
-                    key={date}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3"
-                  >
-                    <div>
-                      <p className="font-semibold text-ink-800">{formatProductionDate(date)}</p>
-                      <p className="text-xs text-slate-500">{date}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeProductionDate(date)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200"
-                      aria-label="Удалить дату изготовления"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500">
-                Пока не добавлено ни одной доступной даты изготовления.
-              </div>
-            )}
-          </article> */}
-
           <section>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Данные аккаунта</p>
             <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50">
@@ -180,6 +141,11 @@ export const SettingsPage = () => {
                 <li key={item.title}>
                   <button
                     type="button"
+                    onClick={() => {
+                      if (item.to) {
+                        navigate(item.to);
+                      }
+                    }}
                     className="flex w-full items-center justify-between px-3 py-3 text-left transition-colors hover:bg-slate-100"
                   >
                     <span className="inline-flex items-center gap-3">

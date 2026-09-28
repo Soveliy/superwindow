@@ -1,10 +1,249 @@
-<?
+<?php
 use Bitrix\Main\Loader;
 use Bitrix\Main\Data\Cache;
 use Bitrix\Sale;
 use Bitrix\Sale\Fuser;
 use Bitrix\Sale\Order;
 use Bitrix\Sale\Payment;
+
+function normalizePaymentText($value)
+{
+    $value = trim((string)$value);
+
+    if (function_exists('mb_strtolower')) {
+        return mb_strtolower($value, 'UTF-8');
+    }
+
+    return strtolower($value);
+}
+
+function inferPaymentProvider($method)
+{
+    $method = normalizePaymentText($method);
+
+    if (strpos($method, 'yandex') !== false || strpos($method, 'яндекс') !== false) {
+        return 'yandex_pay';
+    }
+
+    if (strpos($method, 'sber') !== false || strpos($method, 'сбер') !== false) {
+        return 'sber';
+    }
+
+    if (strpos($method, 'sbp') !== false || strpos($method, 'сбп') !== false || strpos($method, 'спб') !== false) {
+        return 'sbp';
+    }
+
+    return 'cash';
+}
+
+function inferPaymentVariant($provider, $method)
+{
+    $method = normalizePaymentText($method);
+
+    if ($provider === 'cash') {
+        return 'cash';
+    }
+
+    if ($provider === 'sbp') {
+        return 'qr';
+    }
+
+    if (strpos($method, 'installment') !== false || strpos($method, 'расср') !== false || strpos($method, 'част') !== false) {
+        return 'installment';
+    }
+
+    return 'card';
+}
+
+function extractOrderPaymentPayload($data)
+{
+    $payment = [];
+
+    if (isset($data['payment']) && is_array($data['payment'])) {
+        $payment = array_merge($payment, $data['payment']);
+    }
+
+    if (isset($data['values']['payment']) && is_array($data['values']['payment'])) {
+        $payment = array_merge($payment, $data['values']['payment']);
+    }
+
+    if (isset($data['order']['payment']) && is_array($data['order']['payment'])) {
+        $payment = array_merge($payment, $data['order']['payment']);
+    }
+
+    $method = $payment['method']
+        ?? $payment['payment_method']
+        ?? $payment['paymentMethod']
+        ?? $payment['pay_system_code']
+        ?? $payment['paySystemCode']
+        ?? 'cash';
+
+    $provider = $payment['provider']
+        ?? $payment['payment_provider']
+        ?? $payment['paymentProvider']
+        ?? inferPaymentProvider($method);
+
+    $variant = $payment['variant']
+        ?? $payment['payment_variant']
+        ?? $payment['paymentVariant']
+        ?? inferPaymentVariant($provider, $method);
+
+    return [
+        'provider' => $provider,
+        'variant' => $variant,
+        'method' => $method,
+        'label' => $payment['label'] ?? $payment['payment_label'] ?? $payment['paymentLabel'] ?? '',
+    ];
+}
+
+function hasOrderPaymentPayload($data)
+{
+    return (
+        isset($data['payment']) ||
+        isset($data['values']['payment']) ||
+        isset($data['order']['payment'])
+    );
+}
+
+function getPaymentProviderKeywords($provider)
+{
+    switch ($provider) {
+        case 'yandex_pay':
+            return ['яндекс', 'yandex', 'ya pay', 'yapay'];
+        case 'sber':
+            return ['сбер', 'sber'];
+        case 'sbp':
+            return ['сбп', 'спб', 'sbp'];
+        case 'cash':
+        default:
+            return ['налич', 'cash'];
+    }
+}
+
+function getPaymentVariantKeywords($variant)
+{
+    if ($variant === 'installment') {
+        return ['расср', 'част', 'installment', 'split'];
+    }
+
+    if ($variant === 'card') {
+        return ['карт', 'card'];
+    }
+
+    if ($variant === 'qr') {
+        return ['qr', 'сбп', 'sbp'];
+    }
+
+    return [];
+}
+
+function paymentTextHasKeyword($text, $keywords)
+{
+    foreach ($keywords as $keyword) {
+        if ($keyword !== '' && strpos($text, normalizePaymentText($keyword)) !== false) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function resolveOrderPaySystem($payment)
+{
+    $provider = $payment['provider'] ?? 'cash';
+    $variant = $payment['variant'] ?? 'cash';
+    $providerKeywords = getPaymentProviderKeywords($provider);
+    $variantKeywords = getPaymentVariantKeywords($variant);
+    $bestPaySystem = null;
+    $bestScore = 0;
+
+    $dbPaySystems = CSalePaySystem::GetList(['SORT' => 'ASC'], ['ACTIVE' => 'Y']);
+    while ($paySystem = $dbPaySystems->Fetch()) {
+        $text = normalizePaymentText(
+            ($paySystem['NAME'] ?? '') . ' ' .
+            ($paySystem['PSA_NAME'] ?? '') . ' ' .
+            ($paySystem['DESCRIPTION'] ?? '') . ' ' .
+            ($paySystem['CODE'] ?? '')
+        );
+        $score = 0;
+
+        if (paymentTextHasKeyword($text, $providerKeywords)) {
+            $score += 10;
+        }
+
+        if (!empty($variantKeywords) && paymentTextHasKeyword($text, $variantKeywords)) {
+            $score += 3;
+        }
+
+        if (!empty($payment['label']) && strpos($text, normalizePaymentText($payment['label'])) !== false) {
+            $score += 2;
+        }
+
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $bestPaySystem = $paySystem;
+        }
+    }
+
+    if ($bestPaySystem && $bestScore >= 10) {
+        return [
+            'id' => (int)$bestPaySystem['ID'],
+            'name' => $bestPaySystem['NAME'],
+        ];
+    }
+
+    $fallbackIds = [
+        'cash' => 1,
+        'yandex_pay' => 2,
+        'sber' => 3,
+        'sbp' => 4,
+    ];
+    $fallbackId = $fallbackIds[$provider] ?? 1;
+    $fallbackPaySystem = CSalePaySystem::GetByID($fallbackId);
+
+    if ($fallbackPaySystem) {
+        return [
+            'id' => (int)$fallbackPaySystem['ID'],
+            'name' => $fallbackPaySystem['NAME'],
+        ];
+    }
+
+    return null;
+}
+
+function applyOrderPayment($order, $data)
+{
+    $paymentPayload = extractOrderPaymentPayload(is_array($data) ? $data : []);
+    $paySystem = resolveOrderPaySystem($paymentPayload);
+
+    if (!$paySystem) {
+        return [
+            'success' => false,
+            'message' => 'Payment system not found',
+            'payment' => $paymentPayload,
+        ];
+    }
+
+    $paymentCollection = $order->getPaymentCollection();
+
+    if ($paymentCollection->isEmpty()) {
+        $payment = $paymentCollection->createItem();
+    } else {
+        $payment = $paymentCollection[0];
+    }
+
+    $payment->setField('PAY_SYSTEM_ID', $paySystem['id']);
+    $payment->setField('PAY_SYSTEM_NAME', $paySystem['name']);
+    $payment->setField('SUM', $order->getPrice());
+    $payment->setField('CURRENCY', $order->getCurrency());
+
+    return [
+        'success' => true,
+        'payment' => $paymentPayload,
+        'pay_system_id' => $paySystem['id'],
+        'pay_system_name' => $paySystem['name'],
+    ];
+}
 
 // ПОЛУЧИТЬ ЗАКАЗЫ ДИЛЕРА [status, from, to, limit, page]
 function getOrders($query) {
@@ -38,7 +277,7 @@ function getOrders($query) {
         $filter['<=DATE_INSERT'] = $query['to'];
     }
 
-    $totalOrders = CSaleOrder::GetList([], $filter, []); 
+    $totalOrders = CSaleOrder::GetList([], $filter, []);
 
     $orders = [];
     $dbOrders = CSaleOrder::GetList(
@@ -56,10 +295,38 @@ function getOrders($query) {
             array("SORT" => "ASC"),
             array("ORDER_ID" => $order["ID"])
         );
-        
+
         $arOrderProps = array();
         while ($arProp = $dbProps->Fetch()) {
             $arOrderProps[$arProp["CODE"]] = $arProp["VALUE"];
+        }
+
+        $basket = [];
+        $dbBasket = CSaleBasket::GetList(
+            ["NAME" => "ASC"],
+            ["ORDER_ID" => (int)$order['ID']],
+            false,
+            false,
+            ["*"]
+        );
+
+        while ($item = $dbBasket->Fetch()) {
+            $basketProps = [];
+            $dbProp = CSaleBasket::GetPropsList([], ['BASKET_ID' => $item['ID']]);
+
+            while ($prop = $dbProp->Fetch()) {
+                $basketProps[$prop['CODE']] = $prop['VALUE'];
+            }
+
+            $basket[] = [
+                'id' => (int)$item['PRODUCT_ID'],
+                'basket_id' => (int)$item['ID'],
+                'name' => $item['NAME'],
+                'price' => (float)$item['PRICE'],
+                'quantity' => (float)$item['QUANTITY'],
+                'currency' => $item['CURRENCY'],
+                'props' => $basketProps,
+            ];
         }
 
         $orders[] = [
@@ -72,7 +339,9 @@ function getOrders($query) {
             'payed' => $order['PAYED'] === 'Y',
             'delivery_id' => $order['DELIVERY_ID'],
             'tracking_number' => $order['TRACKING_NUMBER'],
-            'order_props' => $arOrderProps
+            'order_props' => $arOrderProps,
+            'items' => $basket,
+            'basket' => $basket
         ];
     }
 
@@ -143,7 +412,7 @@ function getOrder($query) {
         array("SORT" => "ASC"),
         array("ORDER_ID" => $order["ID"])
     );
-    
+
     $arOrderProps = array();
     while ($arProp = $dbProps->Fetch()) {
         $arOrderProps[$arProp["CODE"]] = $arProp["VALUE"];
@@ -177,19 +446,24 @@ function setOrderPaidFull($query)
         return ['error' => 'Unauthorized'];
     }
 
-    // Подтверждаем что заказ принадлежит текущему дилеру
-    $order = CSaleOrder::GetByID($orderId);
-    if (!$order || (int)$order['RESPONSIBLE_ID'] != $USER->GetID()) {
-        return ['error' => 'Order not found or access denied'];
-    }
-
-    $orderId = (int)$query["order_id"];
+    $data = json_decode(file_get_contents('php://input'), true);
+    $data = is_array($data) ? $data : [];
+    $query = array_merge(is_array($query) ? $query : [], $data);
+    $orderId = (int)($query["order_id"] ?? $query["orderId"] ?? 0);
 
     if ($orderId <= 0) {
+        http_response_code(400);
         return [
             'status' => 'error',
             'message' => 'Invalid order ID'
         ];
+    }
+
+    // Подтверждаем что заказ принадлежит текущему дилеру
+    $order = CSaleOrder::GetByID($orderId);
+    if (!$order || (int)$order['RESPONSIBLE_ID'] != $USER->GetID()) {
+        http_response_code(404);
+        return ['error' => 'Order not found or access denied'];
     }
 
     $order = Order::load($orderId);
@@ -198,6 +472,16 @@ function setOrderPaidFull($query)
         return [
             'status' => 'error',
             'message' => 'Order not found'
+        ];
+    }
+
+    $paymentPayload = extractOrderPaymentPayload($data);
+
+    if (($paymentPayload['provider'] ?? 'cash') !== 'cash') {
+        http_response_code(400);
+        return [
+            'status' => 'error',
+            'message' => 'Manual payment confirmation is available for cash only'
         ];
     }
 
@@ -216,6 +500,9 @@ function setOrderPaidFull($query)
     }
 
     // отмечаем как оплачено
+    $payment->setField("PAY_SYSTEM_ID", 1);
+    $payment->setField("SUM", $price);
+    $payment->setField("CURRENCY", $order->getCurrency());
     $payment->setPaid("Y");
 
     // статус заказа
@@ -238,100 +525,94 @@ function setOrderPaidFull($query)
 }
 
 // СОЗДАТЬ НОВЫЙ ЗАКАЗ
-// function createOrder($query) {
-
-//     // НАДО СОЗДАВАТЬ ПОЛЬЗОВАТЕЛЯ КАК ПОКУПАТЕЛЯ ЧТОБЫ ОН ТОЖЕ МОГ АВТОРИЗОВАТЬСЯ И СМОТРЕТЬ СВОИ ЗАКАЗЫ!!!!!
-
-//     // Защита
-//     // if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-//     //     return ['error' => 'Only POST'];
-//     // }
-
-//     $raw = file_get_contents('php://input');
-//     $data = json_decode($raw, true);
-
-//     global $USER;
-//     $siteId = SITE_ID;
-//     $userId = 2; // системный пользователь 
-//     $responseId = Fuser::getId(); // Получаем ID текущего пользователя КАК ОТВЕТСТВЕННОГО
-
-//     // Загружаем корзину
-//     $basket = Sale\Basket::loadItemsForFUser($responseId, $siteId);
-//     if ($basket->isEmpty()) {
-//         return ['error' => 'Корзина пустая'];
-//     }
-
-//     // Создаем заказ
-//     $order = \Bitrix\Sale\Order::create($siteId, $userId);
-//     $order->setPersonTypeId(1);
-
-//     // Устанавливаем корзину
-//     $order->setBasket($basket);
-
-//     $order->setField('USER_DESCRIPTION', $data['values']['comment']);
-
-//     // Ответственный
-//     $order->setField('RESPONSIBLE_ID', $USER->GetID());
-
-        
-//     // СВОЙСТВА ЗАКАЗА
-//     $propertyCollection = $order->getPropertyCollection();
-//     $propsMap = [
-//         'ORDER_CODE' => $data['order']['code'],
-//         'ORDER_ID' => $data['orderId'],
-
-//         'FIO' => $data['values']['customer']['fullName'],
-//         'PHONE' => $data['values']['customer']['phone'],
-//         'ADDRESS' => $data['values']['customer']['address'],
-
-//         'MEASUREMENT_DATE' => $data['values']['customer']['measurementDate'],
-//         'PRODUCTION_DATE' => $data['values']['customer']['productionDate'],
-//         'INSTALLATION_DATE' => $data['values']['customer']['installationDate'],
-//     ];
-
-//     foreach ($propertyCollection as $property) {
-//         $code = $property->getField('CODE');
-
-//         if (isset($propsMap[$code])) {
-//             $property->setValue($propsMap[$code]);
-//         }
-//     }
-
-//     // Доставка
-//     $shipmentCollection = $order->getShipmentCollection();
-//     foreach ($shipmentCollection as $shipment) {
-//         if (!$shipment->isSystem()) {
-//             $shipment->setFields(['DELIVERY_ID' => 3,]);
-//         }
-//     }
-
-//     // Оплата
-//     $paymentCollection = $order->getPaymentCollection();
-//     $payment = $paymentCollection->createItem();
-
-//     $payment->setFields([
-//         'PAY_SYSTEM_ID' => 2,
-//         'SUM' => $order->getPrice(),
-//         'CURRENCY' => $order->getCurrency()
-//     ]);
-
-//     // Финализируем заказ
-//     $order->doFinalAction(true);
-
-//     $result = $order->save();
-
-//     if ($result->isSuccess()) {
-//         return ['success' => true, 'ORDER_ID' => $order->getId()];
-//     } else {
-//         return ['error' => $result->getErrors()];
-//     }
-// }
 function createOrder($query)
+{
+    $data = json_decode(file_get_contents('php://input'), true);
+    $data = is_array($data) ? $data : [];
+    $sourceLeadId = trim((string)(
+        $data['sourceLeadId']
+        ?? $data['source_lead_id']
+        ?? ($data['values']['sourceLeadId'] ?? '')
+    ));
+
+    if ($sourceLeadId === '') {
+        return createOrderInternal($query, $data, null);
+    }
+
+    if (!function_exists('swLeadServiceContainer')) {
+        http_response_code(503);
+        return [
+            'success' => false,
+            'error' => ['code' => 'lead_module_unavailable', 'message' => 'Модуль лидов недоступен'],
+        ];
+    }
+
+    return swLeadHandle(function () use ($query, $data, $sourceLeadId) {
+        swLeadRequireMethod('POST');
+        $actor = swLeadRequireActor();
+        swLeadRequireCsrf($data);
+        $expectedVersion = $data['sourceLeadVersion'] ?? $data['source_lead_version'] ?? null;
+        $container = swLeadServiceContainer();
+        $initialContext = $container['leads']->getMeasurementOrderContext($sourceLeadId, [
+            'expectedVersion' => $expectedVersion,
+        ], $actor);
+
+        return $container['repository']->withNamedLock('measurement_order', $initialContext['leadId'], function () use ($query, $data, $sourceLeadId, $expectedVersion, $actor, $container) {
+            $context = $container['leads']->getMeasurementOrderContext($sourceLeadId, [
+                'expectedVersion' => $expectedVersion,
+            ], $actor);
+
+            $linkedOrderId = !empty($context['orderId'])
+                ? (int)$context['orderId']
+                : swFindSaleOrderBySourceLead($context['leadId'], $actor['user_id']);
+
+            if ($linkedOrderId > 0) {
+                $orderRow = CSaleOrder::GetByID($linkedOrderId);
+                if (!$orderRow || (int)$orderRow['RESPONSIBLE_ID'] !== (int)$actor['user_id']) {
+                    throw new SwLeadApiException(409, 'linked_order_owner_conflict', 'Связанный заказ принадлежит другому дилеру');
+                }
+                if ($context['status'] !== 'converted') {
+                    swLeadConvertMeasurementAfterOrder($context['leadId'], $linkedOrderId, $actor['dealer_id'], $context['version']);
+                }
+                return [
+                    'success' => true,
+                    'order_id' => $linkedOrderId,
+                    'user_id' => (int)$orderRow['USER_ID'],
+                    'source_lead_id' => (string)$context['leadId'],
+                    'idempotent' => true,
+                ];
+            }
+
+            swLeadAssertOrderPropertiesConfigured();
+            $result = createOrderInternal($query, $data, $context);
+            if (empty($result['success']) || empty($result['order_id'])) {
+                return $result;
+            }
+
+            // The order already contains SOURCE_LEAD_ID, so a retry can recover
+            // the link even if the following HL update is interrupted.
+            swLeadConvertMeasurementAfterOrder(
+                $context['leadId'],
+                $result['order_id'],
+                $actor['dealer_id'],
+                $context['version']
+            );
+            $result['source_lead_id'] = (string)$context['leadId'];
+            $result['sourceLeadId'] = (string)$context['leadId'];
+            return $result;
+        }, 'measurement_order_busy');
+    });
+}
+
+function createOrderInternal($query, $data = null, $leadContext = null)
 {
     global $USER;
     $siteId = SITE_ID;
 
-    $data = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($data)) {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $data = is_array($data) ? $data : [];
+    }
 
     // получаем/создаём пользователя
     $userResult['user_id'] = $data['user_id'];
@@ -352,7 +633,7 @@ function createOrder($query)
 
     // создаем заказ ОТ ПОКУПАТЕЛЯ
     $order = \Bitrix\Sale\Order::create($siteId, $buyerId);
-    $order->setPersonTypeId(1);
+    $order->setPersonTypeId(is_array($leadContext) ? (int)swLeadConfig('sale_order.person_type_id', 1) : 1);
 
     // корзина
     $order->setBasket($basket);
@@ -363,19 +644,35 @@ function createOrder($query)
     // ответственный (дилер)
     $order->setField('RESPONSIBLE_ID', $USER->GetID());
 
+    // СТАТУС
+    $status = !empty($query['status']) ? $query['status'] : 'N';
+    $order->setField('STATUS_ID', $status);
+
     // свойства заказа
     $propertyCollection = $order->getPropertyCollection();
 
     $map = [
-        'FIO' => $data['values']['customer']['fullName'],
-        'PHONE' => $data['values']['customer']['phone'],
-        'ADDRESS' => $data['values']['customer']['address'],
+        'FIO' => $data['values']['customer']['fullName'] ?? null,
+        'PHONE' => $data['values']['customer']['phone'] ?? null,
+        'ADDRESS' => $data['values']['customer']['address'] ?? null,
         'ORDER_CODE' => $data['order']['code'] ?? null,
         'ORDER_ID' => $data['orderId'] ?? null,
-        'MEASUREMENT_DATE' => $data['values']['customer']['measurementDate'],
-        'PRODUCTION_DATE' => $data['values']['customer']['productionDate'],
-        'INSTALLATION_DATE' => $data['values']['customer']['installationDate'],
+        'MEASUREMENT_DATE' => $data['values']['customer']['measurementDate'] ?? null,
+        'PRODUCTION_DATE' => $data['values']['customer']['productionDate'] ?? null,
+        'INSTALLATION_DATE' => $data['values']['customer']['installationDate'] ?? null,
     ];
+
+    if (is_array($leadContext)) {
+        // Lead-sourced identity and address are authoritative. Never accept
+        // client-side overrides for an order converted from a measurement lead.
+        $map['FIO'] = (string)$leadContext['customerName'];
+        $map['PHONE'] = (string)$leadContext['phone'];
+        $map['ADDRESS'] = (string)$leadContext['address'];
+        $leadPropertyCodes = swLeadConfig('sale_order.property_codes', []);
+        $map[$leadPropertyCodes['lead_id']] = (string)$leadContext['leadId'];
+        $map[$leadPropertyCodes['product_type']] = (string)$leadContext['productType'];
+        $map[$leadPropertyCodes['budget']] = $leadContext['budget'] === null ? '' : (string)$leadContext['budget'];
+    }
 
     foreach ($propertyCollection as $prop) {
         $code = $prop->getField('CODE');
@@ -400,15 +697,18 @@ function createOrder($query)
     }
 
     // оплата
-    $paymentCollection = $order->getPaymentCollection();
-    $payment = $paymentCollection->createItem();
-
-    $payment->setField('PAY_SYSTEM_ID', 2);
-    $payment->setField('SUM', $order->getPrice());
-    $payment->setField('CURRENCY', $order->getCurrency());
-
     // финализация
     $order->doFinalAction(true);
+    $paymentResult = applyOrderPayment($order, $data);
+
+    if (empty($paymentResult['success'])) {
+        return [
+            'status' => 'error',
+            'message' => $paymentResult['message'] ?? 'Payment system not found',
+            'payment' => $paymentResult['payment'] ?? null,
+        ];
+    }
+
     $result = $order->save();
 
     if (!$result->isSuccess()) {
@@ -420,6 +720,49 @@ function createOrder($query)
         'order_id' => $order->getId(),
         'user_id' => $buyerId
     ];
+}
+
+function swLeadAssertOrderPropertiesConfigured()
+{
+    if (!Loader::includeModule('sale')) {
+        throw new SwLeadApiException(503, 'sale_module_unavailable', 'Модуль sale недоступен');
+    }
+    $personTypeId = (int)swLeadConfig('sale_order.person_type_id', 1);
+    $codes = array_values((array)swLeadConfig('sale_order.property_codes', []));
+    $missing = [];
+    foreach ($codes as $code) {
+        $property = CSaleOrderProps::GetList([], [
+            'PERSON_TYPE_ID' => $personTypeId,
+            'CODE' => $code,
+            'ACTIVE' => 'Y',
+        ])->Fetch();
+        if (!$property) {
+            $missing[] = $code;
+        }
+    }
+    if ($missing) {
+        throw new SwLeadApiException(503, 'lead_order_properties_missing', 'Не настроены свойства заказа для связи с лидом', [
+            'missingCodes' => $missing,
+        ]);
+    }
+}
+
+function swFindSaleOrderBySourceLead($leadId, $responsibleId)
+{
+    $codes = (array)swLeadConfig('sale_order.property_codes', []);
+    $code = $codes['lead_id'] ?? 'SOURCE_LEAD_ID';
+    $values = CSaleOrderPropsValue::GetList(['ID' => 'DESC'], [
+        'CODE' => $code,
+        'VALUE' => (string)$leadId,
+    ]);
+    while ($value = $values->Fetch()) {
+        $orderId = (int)($value['ORDER_ID'] ?? 0);
+        $orderRow = $orderId > 0 ? CSaleOrder::GetByID($orderId) : null;
+        if ($orderRow && (int)$orderRow['RESPONSIBLE_ID'] === (int)$responsibleId) {
+            return $orderId;
+        }
+    }
+    return 0;
 }
 
 
@@ -435,11 +778,12 @@ function setOrderRefresh($query)
     if (!$USER->IsAuthorized()) {
         return ['error' => 'Unauthorized'];
     }
-    
+
     $siteId = SITE_ID;
     $data = json_decode(file_get_contents('php://input'), true);
+    $data = is_array($data) ? $data : [];
 
-    $orderId = (int)$query["order_id"];
+    $orderId = (int)($query["order_id"] ?? $query["orderId"] ?? $data["order_id"] ?? $data["orderId"] ?? 0);
 
     if ($orderId <= 0) {
         return [
@@ -464,6 +808,10 @@ function setOrderRefresh($query)
     }
 
     // Получаем массив свойств заказа
+    if (isOrderLockedForEditing($orderId)) {
+        return getOrderEditingLockedResponse();
+    }
+
     $propertyCollection = $order->getPropertyCollection();
     $arProps = $propertyCollection->getArray();
 
@@ -572,9 +920,19 @@ function setOrderRefresh($query)
 
                 // labels
                 foreach ($label as $k => $v) {
-                    if ($k !== 'positionId') {
-                        $currentProps[$k] = $v;
+                    // if ($k !== 'positionId') {
+                    //     $currentProps[$k] = $v;
+                    // }
+
+                    if ($k === 'positionId') {
+                        continue;
                     }
+
+                    if (is_array($v) && empty($v)) {
+                        continue;
+                    }
+
+                    $currentProps[$k] = is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : $v;
                 }
 
                 // сохранить обратно
@@ -693,9 +1051,26 @@ function setOrderRefresh($query)
 
     }
 
+    // СТАТУС
+    if (!empty($query['status'])) {
+        $order->setField('STATUS_ID', $query['status']);
+    }
+
     // Перерасчет заказа
     $order->doFinalAction(true);
     // Сохраняем заказ зново
+    if (hasOrderPaymentPayload($data)) {
+        $paymentResult = applyOrderPayment($order, $data);
+
+        if (empty($paymentResult['success'])) {
+            return [
+                'status' => 'error',
+                'message' => $paymentResult['message'] ?? 'Payment system not found',
+                'payment' => $paymentResult['payment'] ?? null,
+            ];
+        }
+    }
+
     $result = $order->save();
 
     if (!$result->isSuccess()) {
@@ -712,4 +1087,139 @@ function setOrderRefresh($query)
         // 'debug' => print_r($basket->getBasketItems())
     ];
 
+}
+
+
+
+// ОБНОВЛЕНИЕ КОДА (ID) ЗАКАЗА [order_id, order_code]
+function updateOrderPayment($query)
+{
+    global $USER;
+    if (!$USER->IsAuthorized()) {
+        http_response_code(401);
+        return ['error' => 'Unauthorized'];
+    }
+
+    $data = json_decode(file_get_contents('php://input'), true);
+    $data = is_array($data) ? $data : [];
+    $query = array_merge(is_array($query) ? $query : [], $data);
+
+    $orderId = (int)($query["order_id"] ?? $query["orderId"] ?? 0);
+
+    if ($orderId <= 0) {
+        http_response_code(400);
+        return [
+            'status' => 'error',
+            'message' => 'Invalid order ID'
+        ];
+    }
+
+    $orderR = CSaleOrder::GetByID($orderId);
+    if (!$orderR || (int)$orderR['RESPONSIBLE_ID'] != $USER->GetID()) {
+        http_response_code(404);
+        return ['error' => 'Order not found or access denied'];
+    }
+
+    $order = Order::load($orderId);
+
+    if (!$order) {
+        http_response_code(404);
+        return [
+            'status' => 'error',
+            'message' => 'Order not found'
+        ];
+    }
+
+    $order->doFinalAction(true);
+    $paymentResult = applyOrderPayment($order, $query);
+
+    if (empty($paymentResult['success'])) {
+        http_response_code(400);
+        return [
+            'status' => 'error',
+            'message' => $paymentResult['message'] ?? 'Payment system not found',
+            'payment' => $paymentResult['payment'] ?? null,
+        ];
+    }
+
+    $result = $order->save();
+
+    if (!$result->isSuccess()) {
+        http_response_code(400);
+        return [
+            'status' => 'error',
+            'errors' => $result->getErrorMessages()
+        ];
+    }
+
+    return [
+        'status' => 'success',
+        'order_id' => $orderId,
+        'payment' => $paymentResult['payment'],
+        'pay_system_id' => $paymentResult['pay_system_id'],
+        'pay_system_name' => $paymentResult['pay_system_name'],
+    ];
+}
+
+function updateOrderCode($query)
+{
+    // Защита
+    // if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    //     return ['error' => 'Only POST'];
+    // }
+
+    global $USER;
+    if (!$USER->IsAuthorized()) {
+        return ['error' => 'Unauthorized'];
+    }
+
+    $siteId = SITE_ID;
+    $data = json_decode(file_get_contents('php://input'), true);
+    $data = is_array($data) ? $data : [];
+    $query = array_merge(is_array($query) ? $query : [], $data);
+
+    $orderId = (int)($query["order_id"] ?? $query["orderId"] ?? 0);
+    $orderCode = (string)($query["order_code"] ?? $query["orderCode"] ?? '');
+
+    if ($orderId <= 0 || $orderCode === '') {
+        return [
+            'status' => 'error',
+            'message' => 'Invalid order ID or order code'
+        ];
+    }
+
+    $order = Order::load($orderId);
+
+    if (!$order) {
+        return [
+            'success' => false,
+            'error' => 'Order not found'
+        ];
+    }
+
+    $property = $order->getPropertyCollection()->getItemByOrderPropertyCode('ORDER_CODE');
+
+    if (!$property) {
+        return [
+            'success' => false,
+            'error' => 'Property ORDER_CODE not found'
+        ];
+    }
+
+    $property->setValue($orderCode);
+
+    $result = $order->save();
+
+    if (!$result->isSuccess()) {
+        return [
+            'success' => false,
+            'errors' => $result->getErrorMessages()
+        ];
+    }
+
+    return [
+        'success' => true,
+        'order_id' => $orderId,
+        'order_code' => $orderCode
+    ];
 }

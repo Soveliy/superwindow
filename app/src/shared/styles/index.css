@@ -158,4 +158,49 @@
   .superwindow-calendar .react-calendar__tile:disabled {
     @apply cursor-not-allowed text-slate-500 opacity-35;
   }
+
+  .superwindow-calendar .react-calendar__navigation button {
+    background: transparent !important;
+  }
+
+  .superwindow-calendar .react-calendar__tile {
+    background: transparent !important;
+    color: rgb(var(--color-ink-700) / 1) !important;
+  }
+
+  .superwindow-calendar .superwindow-calendar__tile-available {
+    border-color: rgb(var(--color-slate-300) / 1) !important;
+    background: rgb(var(--color-slate-100) / 1) !important;
+    color: rgb(var(--color-ink-800) / 1) !important;
+    opacity: 1 !important;
+  }
+
+  .superwindow-calendar .superwindow-calendar__tile-available:enabled:hover,
+  .superwindow-calendar .superwindow-calendar__tile-available:enabled:focus-visible {
+    border-color: rgb(var(--color-brand-400) / 1) !important;
+    background: rgb(var(--color-brand-50) / 1) !important;
+  }
+
+  .superwindow-calendar .superwindow-calendar__tile-disabled,
+  .superwindow-calendar .react-calendar__tile:disabled {
+    border-color: transparent !important;
+    background: rgb(var(--color-slate-50) / 1) !important;
+    color: rgb(var(--color-slate-500) / 1) !important;
+    opacity: .42 !important;
+    text-decoration: line-through;
+  }
+
+  .superwindow-calendar .react-calendar__tile--now {
+    border-color: rgb(var(--color-brand-400) / 1) !important;
+    background: rgb(var(--color-brand-50) / 1) !important;
+    color: rgb(var(--color-ink-800) / 1) !important;
+  }
+
+  .superwindow-calendar .react-calendar__tile--active,
+  .superwindow-calendar .react-calendar__tile--active:enabled:hover,
+  .superwindow-calendar .react-calendar__tile--active:enabled:focus-visible {
+    border-color: rgb(var(--color-brand-500) / 1) !important;
+    background: rgb(var(--color-brand-200) / 1) !important;
+    color: rgb(var(--color-ink-800) / 1) !important;
+  }
 }
